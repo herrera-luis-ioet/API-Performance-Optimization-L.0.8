@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      target: development
+    environment:
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - .:/app
+    command: ["poetry", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    
+  # Add development-specific services here if needed
+  # For example, a service for running tests or a development database with sample data

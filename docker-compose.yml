@@ -1,0 +1,100 @@
+version: '3.8'
+
+services:
+  # API service
+  api:
+    build:
+      context: .
+      target: development  # Use development stage by default
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - MYSQL_SERVER=mysql
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=password
+      - MYSQL_DB=api_performance
+      - MYSQL_PORT=3306
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      - LOG_LEVEL=DEBUG
+    depends_on:
+      - mysql
+      - redis
+    networks:
+      - api-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # MySQL service
+  mysql:
+    image: mysql:8.0
+    volumes:
+      - mysql-data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+      - MYSQL_DATABASE=api_performance
+    networks:
+      - api-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ppassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis service
+  redis:
+    image: redis:7.0-alpine
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    networks:
+      - api-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# Production configuration override
+# Use with: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+x-production-overrides: &production-overrides
+  api:
+    build:
+      target: production
+    environment:
+      - LOG_LEVEL=INFO
+    restart: always
+
+# Development configuration override
+# Use with: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+x-development-overrides: &development-overrides
+  api:
+    build:
+      target: development
+    environment:
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - .:/app
+    command: ["poetry", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+volumes:
+  mysql-data:
+  redis-data:
+
+networks:
+  api-network:
+    driver: bridge

@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      target: production
+    environment:
+      - LOG_LEVEL=INFO
+    restart: always
+    # Remove development-specific volumes
+    volumes: []
+    command: ["poetry", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+    
+  mysql:
+    # Production MySQL configuration
+    volumes:
+      - mysql-data:/var/lib/mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-password}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-api_performance}
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+    
+  redis:
+    # Production Redis configuration
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G

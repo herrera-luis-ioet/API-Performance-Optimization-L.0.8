@@ -116,8 +116,67 @@ A high-performance, scalable FastAPI-based API service component with Redis cach
 
 5. Run with Docker:
    ```bash
-   docker-compose up -d
+   # For development environment
+   ./docker-scripts.sh dev-up
+   
+   # For production environment
+   ./docker-scripts.sh prod-up
    ```
+
+## Docker Setup
+
+The project includes Docker configuration for both development and production environments:
+
+### Docker Files
+- `Dockerfile`: Multi-stage Docker configuration for development and production
+- `docker-compose.yml`: Base Docker Compose configuration with API, Redis, and MySQL services
+- `docker-compose.dev.yml`: Development environment overrides
+- `docker-compose.prod.yml`: Production environment overrides
+- `.dockerignore`: Excludes unnecessary files from Docker build context
+- `docker-scripts.sh`: Helper script for Docker operations
+
+### Environment Variables
+Environment variables are used for configuration. Copy the example file and modify as needed:
+```bash
+cp .env.example .env
+```
+
+### Docker Commands
+The `docker-scripts.sh` script provides convenient commands:
+
+```bash
+# Start development environment
+./docker-scripts.sh dev-up
+
+# Stop development environment
+./docker-scripts.sh dev-down
+
+# Start production environment
+./docker-scripts.sh prod-up
+
+# Stop production environment
+./docker-scripts.sh prod-down
+
+# Build Docker images
+./docker-scripts.sh build
+
+# Show logs from containers
+./docker-scripts.sh logs
+
+# Execute command in API container
+./docker-scripts.sh exec <command>
+
+# Run tests in Docker container
+./docker-scripts.sh test
+
+# Clean Docker resources
+./docker-scripts.sh clean
+```
+
+### Docker Volumes
+The Docker Compose configuration includes persistent volumes for:
+- MySQL data: `mysql-data`
+- Redis data: `redis-data`
 
 ## Development Workflow
 
