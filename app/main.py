@@ -6,6 +6,7 @@ This module creates and configures the FastAPI application.
 import logging
 from typing import Any, Dict
 
+import asyncio
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,6 +15,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.v1.api import api_router
 from app.core.config import settings
+from app.db.session import init_db
 
 # Configure logging
 logging.basicConfig(
@@ -110,3 +112,26 @@ def create_application() -> FastAPI:
 
 # Create the FastAPI application
 app = create_application()
+
+
+# Initialize database on startup
+@app.on_event("startup")
+async def startup_db_client() -> None:
+    """Initialize database on startup."""
+    try:
+        logger.info("Initializing database...")
+        await init_db()
+        logger.info("Database initialized successfully.")
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {e}")
+        raise
+
+
+@app.on_event("shutdown")
+async def shutdown_db_client() -> None:
+    """Close database connections on shutdown."""
+    from app.db.session import engine
+    
+    logger.info("Closing database connections...")
+    await engine.dispose()
+    logger.info("Database connections closed.")
