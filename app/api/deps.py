@@ -5,10 +5,12 @@ This module provides dependencies that can be injected into API endpoints.
 
 from typing import AsyncGenerator, Optional, Callable, Dict, Any, List, Type
 
-from fastapi import Depends, HTTPException, Query, status
+from fastapi import Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
+from app.core.cache import RedisCache, get_redis_cache
+from app.core.rate_limit import RateLimiter, RateLimitDependency, get_rate_limiter
 from app.db.session import get_db_session
 
 
@@ -63,3 +65,46 @@ def handle_db_exceptions(func: Callable) -> Callable:
                 detail=f"Database error: {str(e)}"
             )
     return wrapper
+
+
+# PUBLIC_INTERFACE
+def get_cache() -> RedisCache:
+    """Dependency for getting the Redis cache instance.
+    
+    Returns:
+        RedisCache: Redis cache instance
+    """
+    return get_redis_cache()
+
+
+# PUBLIC_INTERFACE
+def get_limiter() -> RateLimiter:
+    """Dependency for getting the rate limiter instance.
+    
+    Returns:
+        RateLimiter: Rate limiter instance
+    """
+    return get_rate_limiter()
+
+
+# PUBLIC_INTERFACE
+def rate_limit(
+    requests: Optional[int] = None,
+    period_seconds: Optional[int] = None,
+    prefix: str = "ratelimit",
+) -> Callable:
+    """Dependency for rate limiting API endpoints.
+    
+    Args:
+        requests: Maximum number of requests allowed in the period
+        period_seconds: Time period in seconds
+        prefix: Key prefix for Redis
+        
+    Returns:
+        Rate limit dependency
+    """
+    return Depends(RateLimitDependency(
+        requests=requests,
+        period_seconds=period_seconds,
+        prefix=prefix,
+    ))

@@ -5,10 +5,13 @@ This module defines the API endpoints for product operations.
 
 from typing import Any, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_pagination_params, handle_db_exceptions, ErrorResponse
+from app.api.deps import (
+    ErrorResponse, get_db, get_pagination_params, handle_db_exceptions, rate_limit
+)
+from app.core.cache import cache, invalidate_cache
 from app.crud.product import product
 from app.schemas.product import ProductCreate, ProductRead, ProductUpdate
 
@@ -22,17 +25,22 @@ router = APIRouter()
     summary="Get all products",
     description="Retrieve a list of all products with pagination",
     responses={
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
         500: {"model": ErrorResponse, "description": "Database error"}
-    }
+    },
+    dependencies=[Depends(rate_limit())]
 )
+@cache(prefix="products_all", expire=300)  # Cache for 5 minutes
 @handle_db_exceptions
 async def get_products(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     pagination: dict = Depends(get_pagination_params)
 ) -> Any:
     """Get all products with pagination.
     
     Args:
+        request: FastAPI request object
         db: Database session
         pagination: Pagination parameters
         
@@ -48,17 +56,22 @@ async def get_products(
     summary="Get active products",
     description="Retrieve a list of active products with pagination",
     responses={
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
         500: {"model": ErrorResponse, "description": "Database error"}
-    }
+    },
+    dependencies=[Depends(rate_limit())]
 )
+@cache(prefix="products_active", expire=300)  # Cache for 5 minutes
 @handle_db_exceptions
 async def get_active_products(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     pagination: dict = Depends(get_pagination_params)
 ) -> Any:
     """Get active products with pagination.
     
     Args:
+        request: FastAPI request object
         db: Database session
         pagination: Pagination parameters
         
@@ -74,11 +87,15 @@ async def get_active_products(
     summary="Get products by category",
     description="Retrieve a list of products by category with pagination",
     responses={
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
         500: {"model": ErrorResponse, "description": "Database error"}
-    }
+    },
+    dependencies=[Depends(rate_limit())]
 )
+@cache(prefix="products_category", expire=300)  # Cache for 5 minutes
 @handle_db_exceptions
 async def get_products_by_category(
+    request: Request,
     category: str = Path(..., description="Product category"),
     db: AsyncSession = Depends(get_db),
     pagination: dict = Depends(get_pagination_params)
@@ -86,6 +103,7 @@ async def get_products_by_category(
     """Get products by category with pagination.
     
     Args:
+        request: FastAPI request object
         category: Product category
         db: Database session
         pagination: Pagination parameters
@@ -105,17 +123,22 @@ async def get_products_by_category(
     description="Retrieve a product by its SKU",
     responses={
         404: {"model": ErrorResponse, "description": "Product not found"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
         500: {"model": ErrorResponse, "description": "Database error"}
-    }
+    },
+    dependencies=[Depends(rate_limit())]
 )
+@cache(prefix="product_sku", expire=300)  # Cache for 5 minutes
 @handle_db_exceptions
 async def get_product_by_sku(
+    request: Request,
     sku: str = Path(..., description="Product SKU"),
     db: AsyncSession = Depends(get_db)
 ) -> Any:
     """Get a product by its SKU.
     
     Args:
+        request: FastAPI request object
         sku: Product SKU
         db: Database session
         
@@ -138,17 +161,22 @@ async def get_product_by_sku(
     description="Retrieve a product by its ID",
     responses={
         404: {"model": ErrorResponse, "description": "Product not found"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
         500: {"model": ErrorResponse, "description": "Database error"}
-    }
+    },
+    dependencies=[Depends(rate_limit())]
 )
+@cache(prefix="product_id", expire=300)  # Cache for 5 minutes
 @handle_db_exceptions
 async def get_product(
+    request: Request,
     product_id: int = Path(..., description="Product ID"),
     db: AsyncSession = Depends(get_db)
 ) -> Any:
     """Get a product by its ID.
     
     Args:
+        request: FastAPI request object
         product_id: Product ID
         db: Database session
         
@@ -175,6 +203,7 @@ async def get_product(
         500: {"model": ErrorResponse, "description": "Database error"}
     }
 )
+@invalidate_cache("products_*")  # Invalidate all product list caches
 @handle_db_exceptions
 async def create_product(
     product_in: ProductCreate,
@@ -210,6 +239,9 @@ async def create_product(
         500: {"model": ErrorResponse, "description": "Database error"}
     }
 )
+@invalidate_cache("products_*")  # Invalidate all product list caches
+@invalidate_cache("product_id:*")  # Invalidate specific product cache
+@invalidate_cache("product_sku:*")  # Invalidate product SKU cache
 @handle_db_exceptions
 async def update_product(
     product_in: ProductUpdate,
@@ -256,6 +288,7 @@ async def update_product(
         500: {"model": ErrorResponse, "description": "Database error"}
     }
 )
+@invalidate_cache(f"product_id:*")  # Invalidate specific product cache
 @handle_db_exceptions
 async def update_product_stock(
     product_id: int = Path(..., description="Product ID"),
@@ -291,6 +324,9 @@ async def update_product_stock(
         500: {"model": ErrorResponse, "description": "Database error"}
     }
 )
+@invalidate_cache("products_*")  # Invalidate all product list caches
+@invalidate_cache("product_id:*")  # Invalidate specific product cache
+@invalidate_cache("product_sku:*")  # Invalidate product SKU cache
 @handle_db_exceptions
 async def delete_product(
     product_id: int = Path(..., description="Product ID"),

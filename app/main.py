@@ -14,7 +14,9 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.v1.api import api_router
+from app.core.cache import redis_cache
 from app.core.config import settings
+from app.core.rate_limit import rate_limiter
 from app.db.session import init_db
 
 # Configure logging
@@ -114,24 +116,46 @@ def create_application() -> FastAPI:
 app = create_application()
 
 
-# Initialize database on startup
+# Initialize database and Redis on startup
 @app.on_event("startup")
 async def startup_db_client() -> None:
-    """Initialize database on startup."""
+    """Initialize database and Redis on startup."""
     try:
+        # Initialize database
         logger.info("Initializing database...")
         await init_db()
         logger.info("Database initialized successfully.")
+        
+        # Initialize Redis cache
+        logger.info("Initializing Redis cache...")
+        await redis_cache.initialize()
+        logger.info("Redis cache initialized successfully.")
+        
+        # Initialize rate limiter
+        logger.info("Initializing rate limiter...")
+        await rate_limiter.initialize()
+        logger.info("Rate limiter initialized successfully.")
     except Exception as e:
-        logger.error(f"Failed to initialize database: {e}")
+        logger.error(f"Failed to initialize services: {e}")
         raise
 
 
 @app.on_event("shutdown")
-async def shutdown_db_client() -> None:
-    """Close database connections on shutdown."""
+async def shutdown_clients() -> None:
+    """Close database and Redis connections on shutdown."""
     from app.db.session import engine
     
+    # Close database connections
     logger.info("Closing database connections...")
     await engine.dispose()
     logger.info("Database connections closed.")
+    
+    # Close Redis cache
+    logger.info("Closing Redis cache...")
+    await redis_cache.close()
+    logger.info("Redis cache closed.")
+    
+    # Close rate limiter
+    logger.info("Closing rate limiter...")
+    await rate_limiter.close()
+    logger.info("Rate limiter closed.")
