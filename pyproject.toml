@@ -1,0 +1,75 @@
+[tool.poetry]
+name = "api-performance-optimization"
+version = "0.1.0"
+description = "A high-performance, scalable FastAPI-based API service component with Redis caching and MySQL database integration"
+authors = ["Your Name <your.email@example.com>"]
+readme = "README.md"
+license = "MIT"
+packages = [{include = "app"}]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+fastapi = "^0.104.0"
+uvicorn = {extras = ["standard"], version = "^0.23.2"}
+sqlalchemy = "^2.0.22"
+aiomysql = "^0.2.0"
+redis = "^5.0.1"
+pydantic = {extras = ["email"], version = "^2.4.2"}
+pydantic-settings = "^2.0.3"
+python-dotenv = "^1.0.0"
+alembic = "^1.12.0"
+tenacity = "^8.2.3"
+httpx = "^0.25.0"
+asyncio = "^3.4.3"
+aioredis = "^2.0.1"
+starlette = "^0.27.0"
+email-validator = "^2.1.0"
+python-jose = {extras = ["cryptography"], version = "^3.3.0"}
+passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.2"
+pytest-asyncio = "^0.21.1"
+black = "^23.10.0"
+isort = "^5.12.0"
+flake8 = "^6.1.0"
+mypy = "^1.6.1"
+coverage = "^7.3.2"
+pytest-cov = "^4.1.0"
+locust = "^2.17.0"
+pre-commit = "^3.5.0"
+faker = "^19.10.0"
+types-redis = "^4.6.0.7"
+types-python-jose = "^3.3.0.8"
+types-passlib = "^1.7.7.13"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 88
+target-version = ["py39"]
+include = '\.pyi?$'
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_functions = "test_*"
+python_classes = "Test*"
+asyncio_mode = "auto"
+
+[tool.poetry.scripts]
+start = "uvicorn app.main:app --host 0.0.0.0 --port 8000"
+dev = "uvicorn app.main:app --reload"

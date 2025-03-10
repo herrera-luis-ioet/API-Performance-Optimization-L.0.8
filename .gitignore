@@ -1,59 +1,95 @@
-
-# Python ignorables
-.knowledge/
-logs/
+# Python bytecode
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-build/
-develop-eggs/
+
+# Distribution / packaging
 dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
+build/
 *.egg-info/
-.installed.cfg
 *.egg
-MANIFEST
-*.manifest
-*.spec
-pip-log.txt
-pip-delete-this-directory.txt
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Unit test / coverage reports
 htmlcov/
 .tox/
+.nox/
 .coverage
 .coverage.*
 .cache
 nosetests.xml
 coverage.xml
 *.cover
+*.py,cover
 .hypothesis/
 .pytest_cache/
+cover/
 
-# Ignore all directories containing pyvenv.cfg
-**/pyvenv.cfg
-**/*/pyvenv.cfg
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Node.js ignorables
-node_modules/
-npm-debug.log
-yarn-error.log
-.pnp/
-.pnp.js
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment variables
 .env
+.env.local
+.env.development
 .env.test
-.cache/
-.next/
-.nuxt/
-.vuepress/dist
-.serverless/
-.fusebox/
-.dynamodb/
+.env.production
+
+# Docker
+.dockerignore
+
+# Database
+*.sqlite3
+*.db
+
+# Redis dump
+dump.rdb
+
+# Alembic migrations (optional, depending on your workflow)
+# alembic/versions/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# Poetry local configuration
+poetry.lock
+.poetry/
+
+# Locust load testing
+locust-report/
