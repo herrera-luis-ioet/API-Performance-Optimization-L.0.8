@@ -343,6 +343,7 @@ def cache(
         sig = inspect.signature(func)
         func_prefix = prefix or func.__name__
         
+        # Create a properly wrapped function that preserves the signature
         @functools.wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             # Skip caching if Redis is not initialized
@@ -397,6 +398,10 @@ def cache(
             
             return result
         
+        # Update wrapper signature to match the original function
+        # This is crucial for FastAPI's OpenAPI schema generation
+        wrapper.__signature__ = sig
+        
         return wrapper
     
     return decorator
@@ -413,6 +418,9 @@ def invalidate_cache(pattern: str) -> Callable:
         Decorated function
     """
     def decorator(func: Callable) -> Callable:
+        # Get function signature
+        sig = inspect.signature(func)
+        
         @functools.wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             # Execute the function first
@@ -424,6 +432,10 @@ def invalidate_cache(pattern: str) -> Callable:
                 logger.debug(f"Invalidated {deleted} cache keys matching pattern: {pattern}")
             
             return result
+        
+        # Update wrapper signature to match the original function
+        # This is crucial for FastAPI's OpenAPI schema generation
+        wrapper.__signature__ = sig
         
         return wrapper
     

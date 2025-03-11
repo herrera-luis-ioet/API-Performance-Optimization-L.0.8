@@ -4,7 +4,9 @@ This module provides distributed rate limiting functionality using Redis as the 
 """
 
 import asyncio
+import functools
 import hashlib
+import inspect
 import logging
 import time
 from dataclasses import dataclass
@@ -207,6 +209,10 @@ def rate_limit(
     )
 
     def decorator(func: Callable) -> Callable:
+        # Get function signature
+        sig = inspect.signature(func)
+        
+        @functools.wraps(func)
         async def wrapper(request: Request, *args: Any, **kwargs: Any) -> Any:
             # Skip rate limiting if disabled for testing or not initialized
             if RateLimitDependency.is_testing_disabled() or not rate_limiter._initialized:
@@ -243,6 +249,10 @@ def rate_limit(
                 response.headers[name] = value
             
             return response
+        
+        # Update wrapper signature to match the original function
+        # This is crucial for FastAPI's OpenAPI schema generation
+        wrapper.__signature__ = sig
         
         return wrapper
     

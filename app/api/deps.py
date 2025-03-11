@@ -4,6 +4,7 @@ This module provides dependencies that can be injected into API endpoints.
 """
 
 import functools
+import inspect
 from typing import AsyncGenerator, Optional, Callable, Dict, Any, List, Type
 
 from fastapi import Depends, HTTPException, Query, Request, status
@@ -58,6 +59,9 @@ def handle_db_exceptions(func: Callable) -> Callable:
     Returns:
         Decorated function
     """
+    # Get function signature
+    sig = inspect.signature(func)
+    
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):
         try:
@@ -68,6 +72,11 @@ def handle_db_exceptions(func: Callable) -> Callable:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Database error: {str(e)}"
             )
+    
+    # Update wrapper signature to match the original function
+    # This is crucial for FastAPI's OpenAPI schema generation
+    wrapper.__signature__ = sig
+    
     return wrapper
 
 
