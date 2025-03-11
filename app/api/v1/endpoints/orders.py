@@ -329,7 +329,8 @@ async def update_order_status(
         404: {"model": ErrorResponse, "description": "Order not found"},
         429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
         500: {"model": ErrorResponse, "description": "Database error"}
-    }
+    },
+    response_model=None
 )
 @rate_limit()
 @handle_db_exceptions

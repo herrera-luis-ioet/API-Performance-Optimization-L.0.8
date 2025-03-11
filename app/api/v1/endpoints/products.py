@@ -322,7 +322,8 @@ async def update_product_stock(
     responses={
         404: {"model": ErrorResponse, "description": "Product not found"},
         500: {"model": ErrorResponse, "description": "Database error"}
-    }
+    },
+    response_model=None
 )
 @invalidate_cache("products_*")  # Invalidate all product list caches
 @invalidate_cache("product_id:*")  # Invalidate specific product cache

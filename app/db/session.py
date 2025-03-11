@@ -32,7 +32,7 @@ engine = create_async_engine(
     max_overflow=20,  # Maximum number of connections that can be created beyond pool_size
     pool_timeout=30,  # Seconds to wait before timing out on getting a connection from the pool
     pool_recycle=1800,  # Recycle connections after 30 minutes
-    # Using the default AsyncAdaptedQueuePool which is compatible with asyncio
+    # Using the default async-compatible pool class
     # Alternatively, we could use NullPool to disable pooling: poolclass=NullPool
 )
 
