@@ -4,47 +4,55 @@ This module provides fixtures for database and API testing.
 """
 
 import asyncio
-from typing import AsyncGenerator, Dict, Generator
+import logging
+from typing import AsyncGenerator, Dict, Generator, List
 
 import pytest
 import pytest_asyncio
 from fastapi import FastAPI, Depends
 from httpx import AsyncClient
+from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.api.deps import get_db
 from app.core.config import settings
 from app.db.base import Base
-# Import all models to ensure they are registered with Base metadata
-from app.models.product import Product
-from app.models.order import Order, OrderItem, OrderStatus
+
+# Import all models to ensure they are registered with Base metadata before creating tables
+# This is critical for SQLAlchemy to know about all models when creating tables
+from app.models import Product, Order, OrderItem, OrderStatus
 
 # Import main application
 from app.main import create_application
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 
 # Override settings for testing
 settings.SQLALCHEMY_DATABASE_URI = "sqlite+aiosqlite:///:memory:"
 
 
-# Create a test engine and session
-@pytest.fixture(scope="session")
-def event_loop() -> Generator:
-    """Create an event loop for tests."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
+# Use the event_loop fixture provided by pytest-asyncio instead of defining our own
 
 
 @pytest_asyncio.fixture(scope="session")
 async def test_engine() -> AsyncGenerator[AsyncEngine, None]:
     """Create a test database engine."""
+    # Make sure we're using in-memory SQLite for testing
+    settings.SQLALCHEMY_DATABASE_URI = "sqlite+aiosqlite:///:memory:"
+    
     engine = create_async_engine(
         settings.SQLALCHEMY_DATABASE_URI,
         poolclass=NullPool,
         echo=False,
     )
+    
+    # Import all models to ensure they are registered with Base metadata
+    # This is critical for SQLAlchemy to know about all models when creating tables
+    from app.models.product import Product
+    from app.models.order import Order, OrderItem, OrderStatus
     
     # Create tables
     async with engine.begin() as conn:
@@ -53,11 +61,31 @@ async def test_engine() -> AsyncGenerator[AsyncEngine, None]:
         # Then create all tables
         await conn.run_sync(Base.metadata.create_all)
         
-        # Verify that tables were created
-        from sqlalchemy import inspect
-        inspector = inspect(conn)
-        tables = await conn.run_sync(lambda sync_conn: inspector.get_table_names())
-        print(f"Created tables: {tables}")
+        # Verify that tables were created and log them
+        # Use run_sync to properly inspect the tables with SQLAlchemy's inspect
+        tables = await conn.run_sync(lambda sync_conn: inspect(sync_conn).get_table_names())
+        logger.info(f"Created tables: {tables}")
+        
+        # Verify that all expected tables are created
+        expected_tables = ["product", "order", "order_item"]
+        missing_tables = [table for table in expected_tables if table not in tables]
+        if missing_tables:
+            logger.error(f"Missing tables: {missing_tables}")
+            raise Exception(f"Failed to create tables: {missing_tables}")
+        
+        # Verify table columns to ensure they match the model definitions
+        for table in expected_tables:
+            columns = await conn.run_sync(lambda sync_conn: inspect(sync_conn).get_columns(table))
+            column_names = [col["name"] for col in columns]
+            logger.info(f"Table {table} columns: {column_names}")
+            
+            # Check for critical columns based on table
+            if table == "order":
+                critical_columns = ["id", "customer_id", "total_amount", "status"]
+                missing_columns = [col for col in critical_columns if col not in column_names]
+                if missing_columns:
+                    logger.error(f"Missing critical columns in {table}: {missing_columns}")
+                    raise Exception(f"Table {table} is missing critical columns: {missing_columns}")
     
     yield engine
     
@@ -71,10 +99,28 @@ async def test_engine() -> AsyncGenerator[AsyncEngine, None]:
 @pytest_asyncio.fixture(scope="function")
 async def db_session(test_engine: AsyncEngine) -> AsyncGenerator[AsyncSession, None]:
     """Create a test database session."""
+    # Create a new connection for each test
     connection = await test_engine.connect()
+    
+    # Begin a transaction
     transaction = await connection.begin()
     
+    # Create a session bound to the connection
     session = AsyncSession(bind=connection, expire_on_commit=False)
+    
+    # Create tables for this test if they don't exist
+    # This ensures tables are available for each test
+    async with connection.begin_nested() as nested:
+        # Import all models to ensure they are registered with Base metadata
+        from app.models.product import Product
+        from app.models.order import Order, OrderItem, OrderStatus
+        
+        # Create tables within the transaction
+        await connection.run_sync(Base.metadata.create_all)
+        
+        # Verify tables exist
+        tables = await connection.run_sync(lambda sync_conn: inspect(sync_conn).get_table_names())
+        logger.info(f"Tables available for test: {tables}")
     
     yield session
     
