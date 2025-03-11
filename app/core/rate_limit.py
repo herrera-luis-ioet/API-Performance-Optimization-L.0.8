@@ -15,7 +15,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import redis.asyncio as redis
 from fastapi import Depends, HTTPException, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from app.core.cache import redis_cache
 from app.core.config import settings
@@ -244,13 +244,13 @@ def rate_limit(
             # Execute the function
             response = await func(request, *args, **kwargs)
             
-            # Check if the response has a headers attribute
-            if hasattr(response, 'headers'):
+            # Check if the response is a Response object
+            if isinstance(response, Response):
                 # Add rate limit headers to the response
                 for name, value in headers.items():
                     response.headers[name] = value
             else:
-                # If response doesn't have headers attribute, it might be a model object
+                # If response is not a Response object (e.g., a model object like Order)
                 # Wrap it in a JSONResponse to add headers
                 from fastapi.encoders import jsonable_encoder
                 response_data = jsonable_encoder(response)
