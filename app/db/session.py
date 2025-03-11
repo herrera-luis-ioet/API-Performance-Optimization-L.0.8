@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.pool import QueuePool
+from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
 
@@ -32,7 +32,8 @@ engine = create_async_engine(
     max_overflow=20,  # Maximum number of connections that can be created beyond pool_size
     pool_timeout=30,  # Seconds to wait before timing out on getting a connection from the pool
     pool_recycle=1800,  # Recycle connections after 30 minutes
-    poolclass=QueuePool,  # Use QueuePool for connection pooling
+    # Using the default AsyncAdaptedQueuePool which is compatible with asyncio
+    # Alternatively, we could use NullPool to disable pooling: poolclass=NullPool
 )
 
 # Create async session factory
