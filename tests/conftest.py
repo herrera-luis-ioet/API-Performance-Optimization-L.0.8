@@ -37,7 +37,7 @@ settings.SQLALCHEMY_DATABASE_URI = "sqlite+aiosqlite:///:memory:"
 # Use the event_loop fixture provided by pytest-asyncio instead of defining our own
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture(scope="function")
 async def test_engine() -> AsyncGenerator[AsyncEngine, None]:
     """Create a test database engine."""
     # Make sure we're using in-memory SQLite for testing
