@@ -6,10 +6,11 @@ This module defines the API endpoints for order operations.
 from datetime import datetime
 from typing import Any, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db, get_pagination_params, handle_db_exceptions, ErrorResponse
+from app.core.rate_limit import rate_limit
 from app.crud.order import order, order_item
 from app.models.order import OrderStatus
 from app.schemas.order import OrderCreate, OrderRead, OrderUpdate
@@ -24,17 +25,21 @@ router = APIRouter()
     summary="Get all orders",
     description="Retrieve a list of all orders with pagination",
     responses={
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
         500: {"model": ErrorResponse, "description": "Database error"}
     }
 )
+@rate_limit()
 @handle_db_exceptions
 async def get_orders(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     pagination: dict = Depends(get_pagination_params)
 ) -> Any:
     """Get all orders with pagination.
     
     Args:
+        request: FastAPI request object
         db: Database session
         pagination: Pagination parameters
         
@@ -50,11 +55,14 @@ async def get_orders(
     summary="Get orders by customer",
     description="Retrieve a list of orders for a specific customer with pagination",
     responses={
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
         500: {"model": ErrorResponse, "description": "Database error"}
     }
 )
+@rate_limit()
 @handle_db_exceptions
 async def get_orders_by_customer(
+    request: Request,
     customer_id: int = Path(..., description="Customer ID"),
     db: AsyncSession = Depends(get_db),
     pagination: dict = Depends(get_pagination_params)
@@ -62,6 +70,7 @@ async def get_orders_by_customer(
     """Get orders by customer with pagination.
     
     Args:
+        request: FastAPI request object
         customer_id: Customer ID
         db: Database session
         pagination: Pagination parameters
@@ -81,11 +90,14 @@ async def get_orders_by_customer(
     description="Retrieve a list of orders with a specific status with pagination",
     responses={
         400: {"model": ErrorResponse, "description": "Invalid status"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
         500: {"model": ErrorResponse, "description": "Database error"}
     }
 )
+@rate_limit()
 @handle_db_exceptions
 async def get_orders_by_status(
+    request: Request,
     status: OrderStatus = Path(..., description="Order status"),
     db: AsyncSession = Depends(get_db),
     pagination: dict = Depends(get_pagination_params)
@@ -93,6 +105,7 @@ async def get_orders_by_status(
     """Get orders by status with pagination.
     
     Args:
+        request: FastAPI request object
         status: Order status
         db: Database session
         pagination: Pagination parameters
@@ -112,11 +125,14 @@ async def get_orders_by_status(
     description="Retrieve a list of orders within a specific date range with pagination",
     responses={
         400: {"model": ErrorResponse, "description": "Invalid date range"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
         500: {"model": ErrorResponse, "description": "Database error"}
     }
 )
+@rate_limit()
 @handle_db_exceptions
 async def get_orders_by_date_range(
+    request: Request,
     start_date: datetime = Query(..., description="Start date (ISO format)"),
     end_date: datetime = Query(..., description="End date (ISO format)"),
     db: AsyncSession = Depends(get_db),
@@ -125,6 +141,7 @@ async def get_orders_by_date_range(
     """Get orders by date range with pagination.
     
     Args:
+        request: FastAPI request object
         start_date: Start date
         end_date: End date
         db: Database session
@@ -152,17 +169,21 @@ async def get_orders_by_date_range(
     description="Retrieve an order by its ID with its items",
     responses={
         404: {"model": ErrorResponse, "description": "Order not found"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
         500: {"model": ErrorResponse, "description": "Database error"}
     }
 )
+@rate_limit()
 @handle_db_exceptions
 async def get_order(
+    request: Request,
     order_id: int = Path(..., description="Order ID"),
     db: AsyncSession = Depends(get_db)
 ) -> Any:
     """Get an order by its ID with its items.
     
     Args:
+        request: FastAPI request object
         order_id: Order ID
         db: Database session
         
@@ -186,17 +207,21 @@ async def get_order(
     description="Create a new order with items",
     responses={
         400: {"model": ErrorResponse, "description": "Invalid input"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
         500: {"model": ErrorResponse, "description": "Database error"}
     }
 )
+@rate_limit()
 @handle_db_exceptions
 async def create_order(
+    request: Request,
     order_in: OrderCreate,
     db: AsyncSession = Depends(get_db)
 ) -> Any:
     """Create a new order with items.
     
     Args:
+        request: FastAPI request object
         order_in: Order data with items
         db: Database session
         
@@ -221,11 +246,14 @@ async def create_order(
     description="Update an order by its ID",
     responses={
         404: {"model": ErrorResponse, "description": "Order not found"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
         500: {"model": ErrorResponse, "description": "Database error"}
     }
 )
+@rate_limit()
 @handle_db_exceptions
 async def update_order(
+    request: Request,
     order_in: OrderUpdate,
     order_id: int = Path(..., description="Order ID"),
     db: AsyncSession = Depends(get_db)
@@ -233,6 +261,7 @@ async def update_order(
     """Update an order.
     
     Args:
+        request: FastAPI request object
         order_in: Order data to update
         order_id: Order ID
         db: Database session
@@ -258,11 +287,14 @@ async def update_order(
     description="Update an order's status",
     responses={
         404: {"model": ErrorResponse, "description": "Order not found"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
         500: {"model": ErrorResponse, "description": "Database error"}
     }
 )
+@rate_limit()
 @handle_db_exceptions
 async def update_order_status(
+    request: Request,
     order_id: int = Path(..., description="Order ID"),
     status: OrderStatus = Query(..., description="New order status"),
     db: AsyncSession = Depends(get_db)
@@ -270,6 +302,7 @@ async def update_order_status(
     """Update an order's status.
     
     Args:
+        request: FastAPI request object
         order_id: Order ID
         status: New order status
         db: Database session
@@ -294,17 +327,21 @@ async def update_order_status(
     description="Delete an order by its ID",
     responses={
         404: {"model": ErrorResponse, "description": "Order not found"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
         500: {"model": ErrorResponse, "description": "Database error"}
     }
 )
+@rate_limit()
 @handle_db_exceptions
 async def delete_order(
+    request: Request,
     order_id: int = Path(..., description="Order ID"),
     db: AsyncSession = Depends(get_db)
 ) -> None:
     """Delete an order.
     
     Args:
+        request: FastAPI request object
         order_id: Order ID
         db: Database session
     """
