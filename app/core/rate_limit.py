@@ -244,9 +244,20 @@ def rate_limit(
             # Execute the function
             response = await func(request, *args, **kwargs)
             
-            # Add rate limit headers to the response
-            for name, value in headers.items():
-                response.headers[name] = value
+            # Check if the response has a headers attribute
+            if hasattr(response, 'headers'):
+                # Add rate limit headers to the response
+                for name, value in headers.items():
+                    response.headers[name] = value
+            else:
+                # If response doesn't have headers attribute, it might be a model object
+                # Wrap it in a JSONResponse to add headers
+                from fastapi.encoders import jsonable_encoder
+                response_data = jsonable_encoder(response)
+                response = JSONResponse(
+                    content=response_data,
+                    headers=headers
+                )
             
             return response
         
