@@ -16,12 +16,12 @@ from sqlalchemy.pool import NullPool
 from app.api.deps import get_db
 from app.core.config import settings
 from app.db.base import Base
-# Import models to ensure they are registered with Base metadata
+# Import all models to ensure they are registered with Base metadata
 from app.models.product import Product
-from app.models.order import Order, OrderItem
-from app.main import create_application
 from app.models.order import Order, OrderItem, OrderStatus
-from app.models.product import Product
+
+# Import main application
+from app.main import create_application
 
 
 # Override settings for testing
@@ -48,8 +48,16 @@ async def test_engine() -> AsyncGenerator[AsyncEngine, None]:
     
     # Create tables
     async with engine.begin() as conn:
+        # First drop all tables to ensure a clean state
         await conn.run_sync(Base.metadata.drop_all)
+        # Then create all tables
         await conn.run_sync(Base.metadata.create_all)
+        
+        # Verify that tables were created
+        from sqlalchemy import inspect
+        inspector = inspect(conn)
+        tables = await conn.run_sync(lambda sync_conn: inspector.get_table_names())
+        print(f"Created tables: {tables}")
     
     yield engine
     

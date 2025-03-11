@@ -41,8 +41,14 @@ class OrderCRUD(BaseCRUD[Order, OrderCreate, OrderUpdate, OrderRead]):
         try:
             # Create order without items first
             order_data = obj_in.model_dump(exclude={"items"})
-            # Ensure customer_id is properly set from input data
-            # (It's already included in order_data from model_dump, but we're being explicit)
+            
+            # Ensure customer_id is properly set from input data if provided
+            if obj_in.customer_id is not None:
+                order_data["customer_id"] = obj_in.customer_id
+                
+            # Initialize with zero total_amount, will be updated after items are created
+            order_data["total_amount"] = 0
+            
             db_order = Order(**order_data)
             db.add(db_order)
             await db.flush()  # Flush to get the order ID

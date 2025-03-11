@@ -244,18 +244,17 @@ async def create_order(
         )
     
     try:
-        # Use explicit transaction management with db_session context manager
-        async with db_session() as session:
-            logger.info(f"Starting transaction for order creation with {len(order_in.items)} items")
-            
-            # Create the order with items in a single transaction
-            db_order = await order.create_with_items(session, obj_in=order_in)
-            
-            # Get the complete order with items
-            result = await order.get_with_items(session, order_id=db_order.id)
-            logger.info(f"Successfully created order ID: {db_order.id}")
-            
-            return result
+        # Use the provided db session instead of creating a new one
+        logger.info(f"Starting transaction for order creation with {len(order_in.items)} items")
+        
+        # Create the order with items in a single transaction
+        db_order = await order.create_with_items(db, obj_in=order_in)
+        
+        # Get the complete order with items
+        result = await order.get_with_items(db, order_id=db_order.id)
+        logger.info(f"Successfully created order ID: {db_order.id}")
+        
+        return result
             
     except ValueError as e:
         # Handle validation errors
