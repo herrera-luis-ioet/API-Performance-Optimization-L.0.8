@@ -16,6 +16,9 @@ from sqlalchemy.pool import NullPool
 from app.api.deps import get_db
 from app.core.config import settings
 from app.db.base import Base
+# Import models to ensure they are registered with Base metadata
+from app.models.product import Product
+from app.models.order import Order, OrderItem
 from app.main import create_application
 from app.models.order import Order, OrderItem, OrderStatus
 from app.models.product import Product
