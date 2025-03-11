@@ -5,15 +5,21 @@ This module defines the API endpoints for order operations.
 
 from datetime import datetime
 from typing import Any, List, Optional
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.deps import get_db, get_pagination_params, handle_db_exceptions, ErrorResponse
+from app.db.session import db_session
 from app.core.rate_limit import rate_limit
 from app.crud.order import order, order_item
 from app.models.order import OrderStatus
 from app.schemas.order import OrderCreate, OrderRead, OrderUpdate
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # Create router for order endpoints
 router = APIRouter()
@@ -212,7 +218,6 @@ async def get_order(
     }
 )
 @rate_limit()
-@handle_db_exceptions
 async def create_order(
     request: Request,
     order_in: OrderCreate,
@@ -227,6 +232,9 @@ async def create_order(
         
     Returns:
         Created order with items
+        
+    Raises:
+        HTTPException: If order validation fails or database operation fails
     """
     # Validate that order has at least one item
     if not order_in.items or len(order_in.items) == 0:
@@ -235,8 +243,41 @@ async def create_order(
             detail="Order must have at least one item"
         )
     
-    db_order = await order.create_with_items(db, obj_in=order_in)
-    return await order.get_with_items(db, order_id=db_order.id)
+    try:
+        # Use explicit transaction management with db_session context manager
+        async with db_session() as session:
+            logger.info(f"Starting transaction for order creation with {len(order_in.items)} items")
+            
+            # Create the order with items in a single transaction
+            db_order = await order.create_with_items(session, obj_in=order_in)
+            
+            # Get the complete order with items
+            result = await order.get_with_items(session, order_id=db_order.id)
+            logger.info(f"Successfully created order ID: {db_order.id}")
+            
+            return result
+            
+    except ValueError as e:
+        # Handle validation errors
+        logger.error(f"Validation error during order creation: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Validation error: {str(e)}"
+        )
+    except SQLAlchemyError as e:
+        # Handle database errors
+        logger.error(f"Database error during order creation: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error: {str(e)}"
+        )
+    except Exception as e:
+        # Handle unexpected errors
+        logger.error(f"Unexpected error during order creation: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred: {str(e)}"
+        )
 
 
 @router.put(
