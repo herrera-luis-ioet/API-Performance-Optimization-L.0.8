@@ -41,11 +41,14 @@ class OrderCRUD(BaseCRUD[Order, OrderCreate, OrderUpdate, OrderRead]):
         try:
             # Create order without items first
             order_data = obj_in.model_dump(exclude={"items"})
+            # Ensure customer_id is properly set from input data
+            # (It's already included in order_data from model_dump, but we're being explicit)
             db_order = Order(**order_data)
             db.add(db_order)
             await db.flush()  # Flush to get the order ID
             
             # Create order items
+            order_items = []
             for item_data in obj_in.items:
                 # Fetch the product to get its details
                 product = await product_crud.get(db=db, id=item_data.product_id)
@@ -73,6 +76,13 @@ class OrderCRUD(BaseCRUD[Order, OrderCreate, OrderUpdate, OrderRead]):
                     **item_dict
                 )
                 db.add(db_item)
+                order_items.append(db_item)
+            
+            # Calculate total_amount based on order items
+            total_amount = sum(item.price_at_purchase * item.quantity for item in order_items)
+            
+            # Update the order with the calculated total_amount
+            db_order.total_amount = total_amount
             
             await db.commit()
             await db.refresh(db_order)
