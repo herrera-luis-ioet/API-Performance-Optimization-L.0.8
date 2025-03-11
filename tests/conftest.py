@@ -121,6 +121,7 @@ async def test_products(db_session: AsyncSession) -> AsyncGenerator[list, None]:
             name="Test Product 1",
             description="Test description 1",
             sku="TEST-SKU-001",
+            image="https://example.com/images/test-product-1.jpg",
             price=99.99,
             stock_quantity=100,
             category="Electronics",
@@ -131,6 +132,7 @@ async def test_products(db_session: AsyncSession) -> AsyncGenerator[list, None]:
             name="Test Product 2",
             description="Test description 2",
             sku="TEST-SKU-002",
+            image="https://example.com/images/test-product-2.jpg",
             price=149.99,
             stock_quantity=50,
             category="Electronics",
@@ -141,6 +143,7 @@ async def test_products(db_session: AsyncSession) -> AsyncGenerator[list, None]:
             name="Test Product 3",
             description="Test description 3",
             sku="TEST-SKU-003",
+            image=None,  # Testing with null image
             price=199.99,
             stock_quantity=25,
             category="Accessories",

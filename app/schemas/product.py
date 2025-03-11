@@ -37,6 +37,12 @@ class ProductBase(BaseSchema):
         pattern=r"^[A-Za-z0-9\-_]+$",
         examples=["ERG-KB-001"]
     )
+    image: Optional[str] = Field(
+        None,
+        description="URL or path to product image",
+        max_length=255,
+        examples=["https://example.com/images/ergonomic-keyboard.jpg"]
+    )
     price: Decimal = Field(
         ..., 
         description="Product price", 
@@ -97,6 +103,7 @@ class ProductCreate(ProductBase, BaseCreateSchema):
                 "name": "Ergonomic Keyboard",
                 "description": "Comfortable keyboard with ergonomic design",
                 "sku": "ERG-KB-001",
+                "image": "https://example.com/images/ergonomic-keyboard.jpg",
                 "price": 99.99,
                 "stock_quantity": 100,
                 "category": "Electronics",
@@ -129,6 +136,11 @@ class ProductUpdate(BaseUpdateSchema):
         min_length=3, 
         max_length=50,
         pattern=r"^[A-Za-z0-9\-_]+$"
+    )
+    image: Optional[str] = Field(
+        None,
+        description="URL or path to product image",
+        max_length=255
     )
     price: Optional[Decimal] = Field(
         None, 
@@ -178,6 +190,7 @@ class ProductUpdate(BaseUpdateSchema):
             "example": {
                 "price": 89.99,
                 "stock_quantity": 150,
+                "image": "https://example.com/images/updated-keyboard.jpg",
                 "is_active": True
             }
         }
@@ -197,6 +210,7 @@ class ProductRead(ProductBase, BaseReadSchema):
                 "name": "Ergonomic Keyboard",
                 "description": "Comfortable keyboard with ergonomic design",
                 "sku": "ERG-KB-001",
+                "image": "https://example.com/images/ergonomic-keyboard.jpg",
                 "price": 99.99,
                 "stock_quantity": 100,
                 "category": "Electronics",

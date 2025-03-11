@@ -97,6 +97,7 @@ async def test_create_product(client: AsyncClient):
         "name": "New Test Product",
         "description": "New test description",
         "sku": "NEW-TEST-SKU",
+        "image": "https://example.com/images/new-test-product.jpg",
         "price": 299.99,
         "stock_quantity": 75,
         "category": "New Category",
@@ -113,6 +114,7 @@ async def test_create_product(client: AsyncClient):
     data = response.json()
     assert data["name"] == product_data["name"]
     assert data["sku"] == product_data["sku"]
+    assert data["image"] == product_data["image"]
     assert Decimal(str(data["price"])) == Decimal(str(product_data["price"]))
     assert data["stock_quantity"] == product_data["stock_quantity"]
     assert data["category"] == product_data["category"]
@@ -130,6 +132,7 @@ async def test_create_product_duplicate_sku(client: AsyncClient, test_products: 
         "name": "Duplicate SKU Product",
         "description": "This should fail",
         "sku": "TEST-SKU-001",  # Already exists
+        "image": "https://example.com/images/duplicate-product.jpg",
         "price": 399.99,
         "stock_quantity": 50,
         "category": "Test",
@@ -153,7 +156,8 @@ async def test_update_product(client: AsyncClient, test_products: list):
     update_data = {
         "name": "Updated Product Name",
         "price": 129.99,
-        "stock_quantity": 200
+        "stock_quantity": 200,
+        "image": "https://example.com/images/updated-product.jpg"
     }
     
     response = await client.put(
@@ -165,6 +169,7 @@ async def test_update_product(client: AsyncClient, test_products: list):
     data = response.json()
     assert data["id"] == product_id
     assert data["name"] == update_data["name"]
+    assert data["image"] == update_data["image"]
     assert Decimal(str(data["price"])) == Decimal(str(update_data["price"]))
     assert data["stock_quantity"] == update_data["stock_quantity"]
     # Fields not in update_data should remain unchanged
