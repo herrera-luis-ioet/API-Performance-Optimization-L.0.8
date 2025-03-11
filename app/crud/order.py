@@ -39,52 +39,50 @@ class OrderCRUD(BaseCRUD[Order, OrderCreate, OrderUpdate, OrderRead]):
             ValueError: If a product referenced by an order item doesn't exist
         """
         try:
-            # Start a transaction
-            async with db.begin():
-                # Create order without items first
-                order_data = obj_in.model_dump(exclude={"items"})
-                db_order = Order(**order_data)
-                db.add(db_order)
-                await db.flush()  # Flush to get the order ID
+            # Create order without items first
+            order_data = obj_in.model_dump(exclude={"items"})
+            db_order = Order(**order_data)
+            db.add(db_order)
+            await db.flush()  # Flush to get the order ID
+            
+            # Create order items
+            for item_data in obj_in.items:
+                # Fetch the product to get its details
+                product = await product_crud.get(db=db, id=item_data.product_id)
+                if not product:
+                    error_msg = f"Product with ID {item_data.product_id} not found"
+                    logger.error(error_msg)
+                    raise ValueError(error_msg)
                 
-                # Create order items
-                for item_data in obj_in.items:
-                    # Fetch the product to get its details
-                    product = await product_crud.get(db=db, id=item_data.product_id)
-                    if not product:
-                        error_msg = f"Product with ID {item_data.product_id} not found"
-                        logger.error(error_msg)
-                        raise ValueError(error_msg)
-                    
-                    # Create a mutable copy of the item data
-                    item_dict = item_data.model_dump()
-                    
-                    # Set required fields from product if not provided
-                    if not item_dict.get("price_at_purchase"):
-                        item_dict["price_at_purchase"] = product.price
-                    
-                    if not item_dict.get("product_name"):
-                        item_dict["product_name"] = product.name
-                    
-                    if not item_dict.get("product_sku"):
-                        item_dict["product_sku"] = product.sku
-                    
-                    # Create the order item with the updated data
-                    db_item = OrderItem(
-                        order_id=db_order.id,
-                        **item_dict
-                    )
-                    db.add(db_item)
+                # Create a mutable copy of the item data
+                item_dict = item_data.model_dump()
                 
-                await db.commit()
-                await db.refresh(db_order)
-                return db_order
+                # Set required fields from product if not provided
+                if not item_dict.get("price_at_purchase"):
+                    item_dict["price_at_purchase"] = product.price
+                
+                if not item_dict.get("product_name"):
+                    item_dict["product_name"] = product.name
+                
+                if not item_dict.get("product_sku"):
+                    item_dict["product_sku"] = product.sku
+                
+                # Create the order item with the updated data
+                db_item = OrderItem(
+                    order_id=db_order.id,
+                    **item_dict
+                )
+                db.add(db_item)
+            
+            await db.commit()
+            await db.refresh(db_order)
+            return db_order
         except ValueError as e:
-            await db.rollback()
+            # Log the error but don't rollback - let the dependency handle it
             logger.error(f"Validation error when creating order: {str(e)}")
             raise
         except SQLAlchemyError as e:
-            await db.rollback()
+            # Log the error but don't rollback - let the dependency handle it
             logger.error(f"Error creating order with items: {str(e)}")
             raise
     
@@ -148,7 +146,7 @@ class OrderCRUD(BaseCRUD[Order, OrderCreate, OrderUpdate, OrderRead]):
             await db.refresh(order)
             return order
         except SQLAlchemyError as e:
-            await db.rollback()
+            # Log the error but don't rollback - let the dependency handle it
             logger.error(f"Error updating status for order {order_id}: {str(e)}")
             raise
     
