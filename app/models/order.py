@@ -51,7 +51,6 @@ class Order(Base):
     )
     
     # Customer information
-    customer_id: Mapped[Optional[int]] = Column(Integer, nullable=True, index=True)
     customer_email: Mapped[str] = Column(String(255), nullable=False)
     customer_name: Mapped[str] = Column(String(255), nullable=False)
     
@@ -73,10 +72,8 @@ class Order(Base):
         "OrderItem", back_populates="order", cascade="all, delete-orphan"
     )
     
-    # Create composite index for common query patterns
-    __table_args__ = (
-        Index("idx_order_customer_status", "customer_id", "status"),
-    )
+    # No composite index needed after removing customer_id
+    __table_args__ = ()
     
     def __repr__(self) -> str:
         """String representation of the order.

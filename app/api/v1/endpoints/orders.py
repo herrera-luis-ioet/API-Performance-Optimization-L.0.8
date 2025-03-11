@@ -55,39 +55,6 @@ async def get_orders(
     return await order.get_multi(db, skip=pagination["skip"], limit=pagination["limit"])
 
 
-@router.get(
-    "/customer/{customer_id}",
-    response_model=List[OrderRead],
-    summary="Get orders by customer",
-    description="Retrieve a list of orders for a specific customer with pagination",
-    responses={
-        429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
-        500: {"model": ErrorResponse, "description": "Database error"}
-    }
-)
-@rate_limit()
-@handle_db_exceptions
-async def get_orders_by_customer(
-    request: Request,
-    customer_id: int = Path(..., description="Customer ID"),
-    db: AsyncSession = Depends(get_db),
-    pagination: dict = Depends(get_pagination_params)
-) -> Any:
-    """Get orders by customer with pagination.
-    
-    Args:
-        request: FastAPI request object
-        customer_id: Customer ID
-        db: Database session
-        pagination: Pagination parameters
-        
-    Returns:
-        List of orders for the specified customer
-    """
-    return await order.get_by_customer(
-        db, customer_id=customer_id, skip=pagination["skip"], limit=pagination["limit"]
-    )
-
 
 @router.get(
     "/status/{status}",

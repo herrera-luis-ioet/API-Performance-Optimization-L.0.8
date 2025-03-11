@@ -81,7 +81,7 @@ async def test_engine() -> AsyncGenerator[AsyncEngine, None]:
             
             # Check for critical columns based on table
             if table == "order":
-                critical_columns = ["id", "customer_id", "total_amount", "status"]
+                critical_columns = ["id", "total_amount", "status"]
                 missing_columns = [col for col in critical_columns if col not in column_names]
                 if missing_columns:
                     logger.error(f"Missing critical columns in {table}: {missing_columns}")
@@ -230,7 +230,6 @@ async def test_orders(db_session: AsyncSession, test_products: list) -> AsyncGen
         Order(
             status=OrderStatus.PENDING,
             total_amount=199.98,
-            customer_id=1,
             customer_email="customer1@example.com",
             customer_name="Test Customer 1",
             shipping_address="123 Test St",
@@ -243,7 +242,6 @@ async def test_orders(db_session: AsyncSession, test_products: list) -> AsyncGen
         Order(
             status=OrderStatus.PROCESSING,
             total_amount=149.99,
-            customer_id=2,
             customer_email="customer2@example.com",
             customer_name="Test Customer 2",
             shipping_address="456 Test Ave",

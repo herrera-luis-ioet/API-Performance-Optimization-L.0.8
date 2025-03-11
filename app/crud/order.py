@@ -42,10 +42,6 @@ class OrderCRUD(BaseCRUD[Order, OrderCreate, OrderUpdate, OrderRead]):
             # Create order without items first
             order_data = obj_in.model_dump(exclude={"items"})
             
-            # Ensure customer_id is properly set from input data if provided
-            if obj_in.customer_id is not None:
-                order_data["customer_id"] = obj_in.customer_id
-                
             # Initialize with zero total_amount, will be updated after items are created
             order_data["total_amount"] = 0
             
@@ -164,33 +160,6 @@ class OrderCRUD(BaseCRUD[Order, OrderCreate, OrderUpdate, OrderRead]):
         except SQLAlchemyError as e:
             # Log the error but don't rollback - let the dependency handle it
             logger.error(f"Error updating status for order {order_id}: {str(e)}")
-            raise
-    
-    # PUBLIC_INTERFACE
-    async def get_by_customer(
-        self, db: AsyncSession, *, customer_id: int, skip: int = 0, limit: int = 100
-    ) -> List[Order]:
-        """
-        Get orders for a specific customer with pagination.
-        
-        Args:
-            db: Database session
-            customer_id: ID of the customer
-            skip: Number of records to skip
-            limit: Maximum number of records to return
-            
-        Returns:
-            List of orders for the specified customer
-            
-        Raises:
-            SQLAlchemyError: If there's an error during database operation
-        """
-        try:
-            query = select(self.model).where(self.model.customer_id == customer_id).offset(skip).limit(limit)
-            result = await db.execute(query)
-            return result.scalars().all()
-        except SQLAlchemyError as e:
-            logger.error(f"Error getting orders for customer {customer_id}: {str(e)}")
             raise
     
     # PUBLIC_INTERFACE

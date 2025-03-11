@@ -146,12 +146,6 @@ class OrderBase(BaseSchema):
         ge=0,
         examples=[199.98]
     )
-    customer_id: Optional[int] = Field(
-        None, 
-        description="Customer ID", 
-        gt=0,
-        examples=[1]
-    )
     customer_email: EmailStr = Field(
         ..., 
         description="Customer email address",
@@ -342,7 +336,6 @@ class OrderRead(OrderBase, BaseReadSchema):
                 "id": 1,
                 "status": "pending",
                 "total_amount": 199.98,
-                "customer_id": 1,
                 "customer_email": "customer@example.com",
                 "customer_name": "John Doe",
                 "shipping_address": "123 Main St, Apt 4B",

@@ -25,18 +25,6 @@ async def test_get_orders(client: AsyncClient, test_orders: list):
     assert data[1]["customer_email"] == "customer2@example.com"
 
 
-@pytest.mark.asyncio
-async def test_get_orders_by_customer(client: AsyncClient, test_orders: list):
-    """Test getting orders by customer."""
-    customer_id = 1
-    response = await client.get(f"{settings.API_V1_STR}/orders/customer/{customer_id}")
-    
-    assert response.status_code == 200
-    data = response.json()
-    assert len(data) == 1
-    assert data[0]["customer_id"] == customer_id
-    assert data[0]["customer_email"] == "customer1@example.com"
-
 
 @pytest.mark.asyncio
 async def test_get_orders_by_status(client: AsyncClient, test_orders: list):
