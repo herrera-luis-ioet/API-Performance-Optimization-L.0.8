@@ -89,31 +89,12 @@ async def app(db_session: AsyncSession) -> FastAPI:
     from app.api.deps import get_cache, get_limiter
     from app.core.rate_limit import RateLimitDependency
     
-    # Create a dummy rate limiter dependency that doesn't do any rate limiting
-    async def dummy_rate_limiter(request):
-        return None
+    # Disable rate limiting for testing
+    RateLimitDependency.disable_for_testing(True)
     
-    # Override the dependencies
+    # Override the dependencies for cache and rate limiter
     app.dependency_overrides[get_cache] = lambda: None
     app.dependency_overrides[get_limiter] = lambda: None
-    
-    # Replace the RateLimitDependency.__call__ method with our dummy implementation
-    # Store the original method to restore it later if needed
-    original_call = RateLimitDependency.__call__
-    RateLimitDependency.__call__ = dummy_rate_limiter
-    
-    # Override all dependencies that use rate_limit
-    for route in app.routes:
-        if hasattr(route, "dependencies"):
-            # Filter out rate limit dependencies and replace them
-            new_dependencies = []
-            for dep in route.dependencies:
-                if isinstance(dep, Depends) and hasattr(dep.dependency, "__self__") and isinstance(dep.dependency.__self__, RateLimitDependency):
-                    # Skip rate limit dependencies
-                    pass
-                else:
-                    new_dependencies.append(dep)
-            route.dependencies = new_dependencies
     
     return app
 
@@ -123,6 +104,10 @@ async def client(app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
     """Create a test client for the FastAPI application."""
     async with AsyncClient(app=app, base_url="http://test") as client:
         yield client
+    
+    # Reset the rate limit testing flag after each test
+    from app.core.rate_limit import RateLimitDependency
+    RateLimitDependency.disable_for_testing(False)
 
 
 @pytest_asyncio.fixture(scope="function")

@@ -103,12 +103,21 @@ def rate_limit(
     Returns:
         Rate limit dependency
     """
-    # Create a RateLimitDependency instance
-    dependency = RateLimitDependency(
-        requests=requests,
-        period_seconds=period_seconds,
-        prefix=prefix,
-    )
+    # Create a dependency that checks the testing flag at runtime
+    async def rate_limit_dependency(request: Request) -> None:
+        # Skip rate limiting if disabled for testing
+        if RateLimitDependency._testing_disabled:
+            return None
+        
+        # Create a RateLimitDependency instance for normal operation
+        dependency = RateLimitDependency(
+            requests=requests,
+            period_seconds=period_seconds,
+            prefix=prefix,
+        )
+        
+        # Call the dependency
+        return await dependency(request)
     
     # Return the dependency wrapped in Depends
-    return Depends(dependency)
+    return Depends(rate_limit_dependency)

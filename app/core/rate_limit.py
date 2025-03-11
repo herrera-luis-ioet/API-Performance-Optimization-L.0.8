@@ -208,8 +208,8 @@ def rate_limit(
 
     def decorator(func: Callable) -> Callable:
         async def wrapper(request: Request, *args: Any, **kwargs: Any) -> Any:
-            # Skip rate limiting if not initialized
-            if not rate_limiter._initialized:
+            # Skip rate limiting if disabled for testing or not initialized
+            if RateLimitDependency._testing_disabled or not rate_limiter._initialized:
                 return await func(request, *args, **kwargs)
             
             # Get client identifier
@@ -266,6 +266,20 @@ class RateLimitDependency:
     This class provides a dependency that can be used in FastAPI endpoints
     to enforce rate limits.
     """
+    
+    # Class-level flag to disable rate limiting for testing
+    _testing_disabled = False
+    
+    @classmethod
+    def disable_for_testing(cls, disabled: bool = True) -> None:
+        """Disable rate limiting for testing purposes.
+        
+        This method should only be used in tests.
+        
+        Args:
+            disabled: Whether to disable rate limiting
+        """
+        cls._testing_disabled = disabled
 
     def __init__(
         self,
@@ -300,8 +314,8 @@ class RateLimitDependency:
         Raises:
             HTTPException: If rate limit is exceeded
         """
-        # Skip rate limiting if not initialized
-        if not rate_limiter._initialized:
+        # Skip rate limiting if disabled for testing or not initialized
+        if self.__class__._testing_disabled or not rate_limiter._initialized:
             return
         
         # Get client identifier
