@@ -8,7 +8,7 @@ from typing import AsyncGenerator, Dict, Generator
 
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
@@ -86,8 +86,34 @@ async def app(db_session: AsyncSession) -> FastAPI:
     
     # Mock Redis cache and rate limiter by disabling them
     # This is a simplified approach for testing
-    app.dependency_overrides["redis_cache"] = lambda: None
-    app.dependency_overrides["rate_limiter"] = lambda: None
+    from app.api.deps import get_cache, get_limiter
+    from app.core.rate_limit import RateLimitDependency
+    
+    # Create a dummy rate limiter dependency that doesn't do any rate limiting
+    async def dummy_rate_limiter(request):
+        return None
+    
+    # Override the dependencies
+    app.dependency_overrides[get_cache] = lambda: None
+    app.dependency_overrides[get_limiter] = lambda: None
+    
+    # Replace the RateLimitDependency.__call__ method with our dummy implementation
+    # Store the original method to restore it later if needed
+    original_call = RateLimitDependency.__call__
+    RateLimitDependency.__call__ = dummy_rate_limiter
+    
+    # Override all dependencies that use rate_limit
+    for route in app.routes:
+        if hasattr(route, "dependencies"):
+            # Filter out rate limit dependencies and replace them
+            new_dependencies = []
+            for dep in route.dependencies:
+                if isinstance(dep, Depends) and hasattr(dep.dependency, "__self__") and isinstance(dep.dependency.__self__, RateLimitDependency):
+                    # Skip rate limit dependencies
+                    pass
+                else:
+                    new_dependencies.append(dep)
+            route.dependencies = new_dependencies
     
     return app
 

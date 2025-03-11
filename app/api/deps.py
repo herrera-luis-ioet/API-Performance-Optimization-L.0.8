@@ -103,8 +103,12 @@ def rate_limit(
     Returns:
         Rate limit dependency
     """
-    return Depends(RateLimitDependency(
+    # Create a RateLimitDependency instance
+    dependency = RateLimitDependency(
         requests=requests,
         period_seconds=period_seconds,
         prefix=prefix,
-    ))
+    )
+    
+    # Return the dependency wrapped in Depends
+    return Depends(dependency)
