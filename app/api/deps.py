@@ -10,7 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from app.core.cache import RedisCache, get_redis_cache
-from app.core.rate_limit import RateLimiter, RateLimitDependency, get_rate_limiter
+from app.core.rate_limit import (
+    RateLimiter, RateLimitDependency, get_rate_limiter, get_rate_limit_dependency
+)
 from app.db.session import get_db_session
 
 
@@ -103,21 +105,10 @@ def rate_limit(
     Returns:
         Rate limit dependency
     """
-    # Create a dependency that checks the testing flag at runtime
-    async def rate_limit_dependency(request: Request) -> None:
-        # Skip rate limiting if disabled for testing
-        if RateLimitDependency._testing_disabled:
-            return None
-        
-        # Create a RateLimitDependency instance for normal operation
-        dependency = RateLimitDependency(
-            requests=requests,
-            period_seconds=period_seconds,
-            prefix=prefix,
-        )
-        
-        # Call the dependency
-        return await dependency(request)
-    
-    # Return the dependency wrapped in Depends
-    return Depends(rate_limit_dependency)
+    # Use the new get_rate_limit_dependency function which returns a properly
+    # configured Depends object that works with FastAPI's dependency injection
+    return get_rate_limit_dependency(
+        requests=requests,
+        period_seconds=period_seconds,
+        prefix=prefix,
+    )

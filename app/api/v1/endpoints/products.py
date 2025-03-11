@@ -28,7 +28,7 @@ router = APIRouter()
         429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
         500: {"model": ErrorResponse, "description": "Database error"}
     },
-    dependencies=[Depends(rate_limit())]
+    dependencies=[rate_limit()]
 )
 @cache(prefix="products_all", expire=300)  # Cache for 5 minutes
 @handle_db_exceptions
@@ -59,7 +59,7 @@ async def get_products(
         429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
         500: {"model": ErrorResponse, "description": "Database error"}
     },
-    dependencies=[Depends(rate_limit())]
+    dependencies=[rate_limit()]
 )
 @cache(prefix="products_active", expire=300)  # Cache for 5 minutes
 @handle_db_exceptions
@@ -90,7 +90,7 @@ async def get_active_products(
         429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
         500: {"model": ErrorResponse, "description": "Database error"}
     },
-    dependencies=[Depends(rate_limit())]
+    dependencies=[rate_limit()]
 )
 @cache(prefix="products_category", expire=300)  # Cache for 5 minutes
 @handle_db_exceptions
@@ -126,7 +126,7 @@ async def get_products_by_category(
         429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
         500: {"model": ErrorResponse, "description": "Database error"}
     },
-    dependencies=[Depends(rate_limit())]
+    dependencies=[rate_limit()]
 )
 @cache(prefix="product_sku", expire=300)  # Cache for 5 minutes
 @handle_db_exceptions
@@ -164,7 +164,7 @@ async def get_product_by_sku(
         429: {"model": ErrorResponse, "description": "Rate limit exceeded"},
         500: {"model": ErrorResponse, "description": "Database error"}
     },
-    dependencies=[Depends(rate_limit())]
+    dependencies=[rate_limit()]
 )
 @cache(prefix="product_id", expire=300)  # Cache for 5 minutes
 @handle_db_exceptions

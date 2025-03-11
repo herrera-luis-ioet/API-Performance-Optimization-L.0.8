@@ -87,10 +87,13 @@ async def app(db_session: AsyncSession) -> FastAPI:
     # Mock Redis cache and rate limiter by disabling them
     # This is a simplified approach for testing
     from app.api.deps import get_cache, get_limiter
-    from app.core.rate_limit import RateLimitDependency
+    from app.core.rate_limit import RateLimitDependency, rate_limiter
     
     # Disable rate limiting for testing
     RateLimitDependency.disable_for_testing(True)
+    
+    # Set rate limiter as initialized to avoid initialization errors
+    rate_limiter._initialized = True
     
     # Override the dependencies for cache and rate limiter
     app.dependency_overrides[get_cache] = lambda: None

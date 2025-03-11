@@ -209,7 +209,7 @@ def rate_limit(
     def decorator(func: Callable) -> Callable:
         async def wrapper(request: Request, *args: Any, **kwargs: Any) -> Any:
             # Skip rate limiting if disabled for testing or not initialized
-            if RateLimitDependency._testing_disabled or not rate_limiter._initialized:
+            if RateLimitDependency.is_testing_disabled() or not rate_limiter._initialized:
                 return await func(request, *args, **kwargs)
             
             # Get client identifier
@@ -280,6 +280,40 @@ class RateLimitDependency:
             disabled: Whether to disable rate limiting
         """
         cls._testing_disabled = disabled
+    
+    @classmethod
+    def is_testing_disabled(cls) -> bool:
+        """Check if rate limiting is disabled for testing.
+        
+        Returns:
+            bool: True if rate limiting is disabled for testing
+        """
+        return cls._testing_disabled
+    
+    @classmethod
+    def create(
+        cls,
+        requests: Optional[int] = None,
+        period_seconds: Optional[int] = None,
+        prefix: str = "ratelimit",
+    ) -> "RateLimitDependency":
+        """Create a new RateLimitDependency instance.
+        
+        This factory method ensures the dependency is properly configured.
+        
+        Args:
+            requests: Maximum number of requests allowed in the period
+            period_seconds: Time period in seconds
+            prefix: Key prefix for Redis
+            
+        Returns:
+            RateLimitDependency: Configured dependency instance
+        """
+        return cls(
+            requests=requests,
+            period_seconds=period_seconds,
+            prefix=prefix,
+        )
 
     def __init__(
         self,
@@ -315,8 +349,8 @@ class RateLimitDependency:
             HTTPException: If rate limit is exceeded
         """
         # Skip rate limiting if disabled for testing or not initialized
-        if self.__class__._testing_disabled or not rate_limiter._initialized:
-            return
+        if self.__class__.is_testing_disabled() or not rate_limiter._initialized:
+            return None
         
         # Get client identifier
         client_id = rate_limiter.get_client_identifier(request)
@@ -340,3 +374,35 @@ class RateLimitDependency:
                 detail="Rate limit exceeded",
                 headers=headers,
             )
+        
+        # Return None to satisfy FastAPI's dependency injection
+        return None
+
+
+# PUBLIC_INTERFACE
+def get_rate_limit_dependency(
+    requests: Optional[int] = None,
+    period_seconds: Optional[int] = None,
+    prefix: str = "ratelimit",
+) -> Callable:
+    """Create a rate limit dependency for FastAPI.
+    
+    This function creates a properly configured rate limit dependency
+    that can be used with FastAPI's dependency injection system.
+    
+    Args:
+        requests: Maximum number of requests allowed in the period
+        period_seconds: Time period in seconds
+        prefix: Key prefix for Redis
+        
+    Returns:
+        Callable: Rate limit dependency
+    """
+    # Create a dependency that is always callable
+    return Depends(
+        RateLimitDependency.create(
+            requests=requests,
+            period_seconds=period_seconds,
+            prefix=prefix,
+        )
+    )
