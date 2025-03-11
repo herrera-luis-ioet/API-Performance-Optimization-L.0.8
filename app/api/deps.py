@@ -3,6 +3,7 @@
 This module provides dependencies that can be injected into API endpoints.
 """
 
+import functools
 from typing import AsyncGenerator, Optional, Callable, Dict, Any, List, Type
 
 from fastapi import Depends, HTTPException, Query, Request, status
@@ -57,6 +58,7 @@ def handle_db_exceptions(func: Callable) -> Callable:
     Returns:
         Decorated function
     """
+    @functools.wraps(func)
     async def wrapper(*args, **kwargs):
         try:
             return await func(*args, **kwargs)
