@@ -9,7 +9,7 @@ import pytest
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.core.cache import RedisCache, generate_cache_key
+from app.core.cache import RedisCache, generate_cache_key, CustomJSONEncoder
 from app.models.product import Product
 
 
@@ -133,3 +133,192 @@ async def test_cache_get_with_product(redis_cache, sample_product, mock_redis_cl
     assert cached_value["name"] == "Test Product"
     assert cached_value["sku"] == "TEST-SKU-123"
     assert cached_value["price"] == 99.99  # Decimal is converted to float in JSON
+
+
+async def test_decimal_field_serialization(redis_cache, mock_redis_client):
+    """Test that Decimal fields are properly serialized and deserialized."""
+    # Create a product with various Decimal values to test edge cases
+    product_with_decimals = Product(
+        id=42,
+        name="Decimal Test Product",
+        description="Product with various decimal values",
+        sku="DECIMAL-TEST-001",
+        price=Decimal("1234.56"),  # Standard decimal
+        stock_quantity=100,
+        category="Test",
+        is_active=True
+    )
+    
+    # Set up the mock to return True for set operation
+    mock_redis_client.set.return_value = True
+    
+    # Cache the product
+    result = await redis_cache.set("test:decimal:product", product_with_decimals)
+    assert result is True, "Failed to set product with decimal fields in cache"
+    
+    # Extract the serialized value
+    args, kwargs = mock_redis_client.set.call_args
+    key, serialized_value = args
+    
+    # Verify the key
+    assert key == "test:decimal:product"
+    
+    # Verify that the serialized value is valid JSON and can be deserialized
+    try:
+        deserialized = json.loads(serialized_value)
+        assert isinstance(deserialized, dict), "Serialized product should be a dictionary"
+        
+        # Verify decimal fields are properly converted to float
+        assert deserialized["price"] == 1234.56
+        assert isinstance(deserialized["price"], float), "Decimal should be converted to float"
+        
+        # Test direct serialization with CustomJSONEncoder
+        direct_json = json.dumps(product_with_decimals, cls=CustomJSONEncoder)
+        direct_deserialized = json.loads(direct_json)
+        
+        # Verify the direct serialization also works
+        assert direct_deserialized["price"] == 1234.56
+        assert isinstance(direct_deserialized["price"], float)
+        
+        # Set up mock for retrieval
+        mock_redis_client.get.return_value = serialized_value
+        
+        # Test retrieval
+        retrieved = await redis_cache.get("test:decimal:product")
+        assert retrieved["price"] == 1234.56
+        assert isinstance(retrieved["price"], float)
+        
+    except json.JSONDecodeError as e:
+        pytest.fail(f"Serialized product with decimal fields is not valid JSON: {e}")
+
+
+async def test_decimal_edge_cases_serialization(redis_cache, mock_redis_client):
+    """Test serialization of Decimal fields with edge cases."""
+    # Create a dictionary with various Decimal edge cases
+    decimal_edge_cases = {
+        "zero": Decimal("0.0"),
+        "negative": Decimal("-123.45"),
+        "very_large": Decimal("9999999.99"),
+        "very_small": Decimal("0.0001"),
+        "high_precision": Decimal("123.456789"),
+        "scientific_notation": Decimal("1.23E+10"),
+        "integer": Decimal("1000")
+    }
+    
+    # Set up the mock to return True for set operation
+    mock_redis_client.set.return_value = True
+    
+    # Cache the dictionary with decimal edge cases
+    result = await redis_cache.set("test:decimal:edge_cases", decimal_edge_cases)
+    assert result is True, "Failed to set decimal edge cases in cache"
+    
+    # Extract the serialized value
+    args, kwargs = mock_redis_client.set.call_args
+    key, serialized_value = args
+    
+    # Verify the key
+    assert key == "test:decimal:edge_cases"
+    
+    # Verify that the serialized value is valid JSON and can be deserialized
+    try:
+        deserialized = json.loads(serialized_value)
+        assert isinstance(deserialized, dict), "Serialized value should be a dictionary"
+        
+        # Verify all decimal values are properly converted to float
+        assert deserialized["zero"] == 0.0
+        assert deserialized["negative"] == -123.45
+        assert deserialized["very_large"] == 9999999.99
+        assert deserialized["very_small"] == 0.0001
+        assert abs(deserialized["high_precision"] - 123.456789) < 0.000001
+        assert deserialized["scientific_notation"] == 12300000000.0
+        assert deserialized["integer"] == 1000.0
+        
+        # Verify all values are floats
+        for key, value in deserialized.items():
+            assert isinstance(value, float), f"Value for {key} should be a float"
+        
+        # Test direct serialization with CustomJSONEncoder
+        direct_json = json.dumps(decimal_edge_cases, cls=CustomJSONEncoder)
+        direct_deserialized = json.loads(direct_json)
+        
+        # Verify the direct serialization also works for all cases
+        assert direct_deserialized["zero"] == 0.0
+        assert direct_deserialized["negative"] == -123.45
+        assert direct_deserialized["very_large"] == 9999999.99
+        assert direct_deserialized["very_small"] == 0.0001
+        
+        # Set up mock for retrieval
+        mock_redis_client.get.return_value = serialized_value
+        
+        # Test retrieval
+        retrieved = await redis_cache.get("test:decimal:edge_cases")
+        assert retrieved["zero"] == 0.0
+        assert retrieved["negative"] == -123.45
+        assert retrieved["very_large"] == 9999999.99
+        assert retrieved["very_small"] == 0.0001
+        
+    except json.JSONDecodeError as e:
+        pytest.fail(f"Serialized decimal edge cases is not valid JSON: {e}")
+
+
+def test_custom_json_encoder_with_decimal():
+    """Test the CustomJSONEncoder directly with Decimal values."""
+    # Test various Decimal values
+    test_cases = [
+        (Decimal("0.0"), 0.0),
+        (Decimal("123.45"), 123.45),
+        (Decimal("-123.45"), -123.45),
+        (Decimal("9999999.99"), 9999999.99),
+        (Decimal("0.0001"), 0.0001),
+        (Decimal("123.456789"), 123.456789),
+        (Decimal("1.23E+10"), 12300000000.0),
+        (Decimal("1000"), 1000.0)
+    ]
+    
+    # Test each case individually
+    for decimal_value, expected_float in test_cases:
+        # Serialize the Decimal value
+        serialized = json.dumps(decimal_value, cls=CustomJSONEncoder)
+        # Deserialize and verify
+        deserialized = json.loads(serialized)
+        assert deserialized == expected_float, f"Failed for {decimal_value}, got {deserialized}"
+        assert isinstance(deserialized, float), f"Result should be float, got {type(deserialized)}"
+    
+    # Test a complex object with nested Decimal values
+    complex_object = {
+        "simple_decimal": Decimal("123.45"),
+        "nested": {
+            "decimal_list": [Decimal("1.1"), Decimal("2.2"), Decimal("3.3")],
+            "decimal_dict": {"a": Decimal("4.4"), "b": Decimal("5.5")}
+        },
+        "mixed_list": [Decimal("6.6"), "string", 7, True, None]
+    }
+    
+    # Serialize the complex object
+    serialized = json.dumps(complex_object, cls=CustomJSONEncoder)
+    
+    # Verify it's valid JSON
+    try:
+        deserialized = json.loads(serialized)
+        
+        # Verify the structure and values
+        assert deserialized["simple_decimal"] == 123.45
+        assert isinstance(deserialized["simple_decimal"], float)
+        
+        assert deserialized["nested"]["decimal_list"] == [1.1, 2.2, 3.3]
+        for item in deserialized["nested"]["decimal_list"]:
+            assert isinstance(item, float)
+            
+        assert deserialized["nested"]["decimal_dict"]["a"] == 4.4
+        assert deserialized["nested"]["decimal_dict"]["b"] == 5.5
+        assert isinstance(deserialized["nested"]["decimal_dict"]["a"], float)
+        
+        assert deserialized["mixed_list"][0] == 6.6
+        assert isinstance(deserialized["mixed_list"][0], float)
+        assert deserialized["mixed_list"][1] == "string"
+        assert deserialized["mixed_list"][2] == 7
+        assert deserialized["mixed_list"][3] is True
+        assert deserialized["mixed_list"][4] is None
+        
+    except json.JSONDecodeError as e:
+        pytest.fail(f"Complex object with Decimal values is not valid JSON: {e}")
