@@ -20,7 +20,7 @@ router = APIRouter()
 
 
 @router.get(
-    "/",
+    "",
     response_model=List[ProductRead],
     summary="Get all products",
     description="Retrieve a list of all products with pagination",
