@@ -16,16 +16,18 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar, Un
 
 import redis.asyncio as redis
 from fastapi import Depends, Request
+from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel
 
 from app.core.config import settings
+from app.db.base import Base
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
 # Type definitions
 T = TypeVar("T")
-CacheKeyType = Union[str, int, float, bool, Tuple, List, Dict, BaseModel, Enum, None]
+CacheKeyType = Union[str, int, float, bool, Tuple, List, Dict, BaseModel, Enum, Base, None]
 CacheKey = str
 CacheValue = Union[str, bytes, int, float, bool, Dict[str, Any], List[Any], None]
 
@@ -250,17 +252,27 @@ class RedisCache:
 
         Returns:
             str: Serialized value
+            
+        Raises:
+            Exception: If serialization fails
         """
-        if isinstance(value, (str, int, float, bool)) or value is None:
-            return json.dumps(value)
-        elif isinstance(value, (dict, list)):
-            return json.dumps(value)
-        elif isinstance(value, BaseModel):
-            return value.model_dump_json()
-        elif isinstance(value, Enum):
-            return json.dumps(value.value)
-        else:
-            return json.dumps(str(value))
+        try:
+            if isinstance(value, (str, int, float, bool)) or value is None:
+                return json.dumps(value)
+            elif isinstance(value, (dict, list)):
+                return json.dumps(value)
+            elif isinstance(value, BaseModel):
+                return value.model_dump_json()
+            elif isinstance(value, Enum):
+                return json.dumps(value.value)
+            elif isinstance(value, Base):
+                # Handle SQLAlchemy models by converting to dict using jsonable_encoder
+                return json.dumps(jsonable_encoder(value))
+            else:
+                return json.dumps(str(value))
+        except Exception as e:
+            logger.error(f"Error serializing value: {e}")
+            raise
 
     def _deserialize(self, value: str) -> Any:
         """Deserialize a value from Redis.
@@ -302,6 +314,9 @@ def generate_cache_key(
             key_parts.append(arg.model_dump_json())
         elif isinstance(arg, Enum):
             key_parts.append(str(arg.value))
+        elif isinstance(arg, Base):
+            # Handle SQLAlchemy models
+            key_parts.append(json.dumps(jsonable_encoder(arg)))
         else:
             key_parts.append(str(arg))
     
@@ -312,6 +327,9 @@ def generate_cache_key(
             key_parts.append(f"{k}:{v.model_dump_json()}")
         elif isinstance(v, Enum):
             key_parts.append(f"{k}:{v.value}")
+        elif isinstance(v, Base):
+            # Handle SQLAlchemy models
+            key_parts.append(f"{k}:{json.dumps(jsonable_encoder(v))}")
         else:
             key_parts.append(f"{k}:{v}")
     
