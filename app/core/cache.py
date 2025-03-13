@@ -11,6 +11,7 @@ import inspect
 import json
 import logging
 from datetime import timedelta
+from decimal import Decimal
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar, Union, cast
 
@@ -30,6 +31,49 @@ T = TypeVar("T")
 CacheKeyType = Union[str, int, float, bool, Tuple, List, Dict, BaseModel, Enum, Base, None]
 CacheKey = str
 CacheValue = Union[str, bytes, int, float, bool, Dict[str, Any], List[Any], None]
+
+
+class CustomJSONEncoder(json.JSONEncoder):
+    """Custom JSON encoder for handling complex types.
+    
+    This encoder extends the standard JSONEncoder to handle:
+    - Decimal objects (converted to float)
+    - SQLAlchemy models (using jsonable_encoder)
+    - Enum objects (using value attribute)
+    - Pydantic models (using model_dump_json)
+    - Other objects (converted to string)
+    """
+    
+    def default(self, obj: Any) -> Any:
+        """Override the default method to handle non-serializable types.
+        
+        Args:
+            obj: Object to serialize
+            
+        Returns:
+            JSON serializable object
+        """
+        try:
+            if isinstance(obj, Decimal):
+                # Convert Decimal to float for JSON serialization
+                return float(obj)
+            elif isinstance(obj, Base):
+                # Handle SQLAlchemy models
+                return jsonable_encoder(obj)
+            elif isinstance(obj, Enum):
+                # Handle Enum types
+                return obj.value
+            elif isinstance(obj, BaseModel):
+                # Handle Pydantic models
+                return json.loads(obj.model_dump_json())
+            # Add more type handling as needed
+            
+            # Let the base class handle the rest or raise TypeError
+            return super().default(obj)
+        except Exception as e:
+            # If all else fails, convert to string
+            logger.warning(f"Falling back to string representation for {type(obj).__name__}: {e}")
+            return str(obj)
 
 
 class RedisCache:
@@ -260,18 +304,26 @@ class RedisCache:
             if isinstance(value, (str, int, float, bool)) or value is None:
                 return json.dumps(value)
             elif isinstance(value, (dict, list)):
-                return json.dumps(value)
+                return json.dumps(value, cls=CustomJSONEncoder)
             elif isinstance(value, BaseModel):
                 return value.model_dump_json()
             elif isinstance(value, Enum):
                 return json.dumps(value.value)
             elif isinstance(value, Base):
                 # Handle SQLAlchemy models by converting to dict using jsonable_encoder
-                return json.dumps(jsonable_encoder(value))
+                # and then serializing with our custom encoder
+                return json.dumps(jsonable_encoder(value), cls=CustomJSONEncoder)
             else:
-                return json.dumps(str(value))
+                return json.dumps(value, cls=CustomJSONEncoder)
+        except TypeError as e:
+            logger.error(f"Type error during serialization: {e}")
+            logger.error(f"Failed to serialize object of type: {type(value).__name__}")
+            raise
+        except ValueError as e:
+            logger.error(f"Value error during serialization: {e}")
+            raise
         except Exception as e:
-            logger.error(f"Error serializing value: {e}")
+            logger.error(f"Unexpected error serializing value: {e}")
             raise
 
     def _deserialize(self, value: str) -> Any:
