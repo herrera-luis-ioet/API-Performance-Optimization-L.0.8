@@ -323,21 +323,6 @@ jobs:
                 echo "Lambda function is in Creating state"
                 echo "Creation started at: $CREATION_TIME"
                 echo "Elapsed time since last modification: ${elapsed_time}s"
-                
-                # Enhanced Creating state handling
-                if [ $elapsed_time -gt $STATE_CHANGE_TIMEOUT ]; then
-                  echo "WARNING: Function has been in Creating state for too long"
-                  echo "Creation time: $CREATION_TIME"
-                  echo "Elapsed time: ${elapsed_time}s"
-                  echo "This may indicate a stuck deployment"
-                  return 10
-                fi
-                
-                # Check for specific creating state conditions
-                if [ ! -z "$LAST_UPDATE_REASON" ] && [ "$LAST_UPDATE_REASON" != "null" ]; then
-                  echo "Creation status reason: $LAST_UPDATE_REASON"
-                fi
-                
                 return 9
                 ;;
               "Active")
@@ -355,22 +340,6 @@ jobs:
                   "Creating")
                     echo "Function creation is in progress (started at: $CREATION_TIME)"
                     echo "Elapsed time: ${elapsed_time}s"
-                    
-                    # Enhanced creation progress tracking
-                    if [ $elapsed_time -gt $STATE_CHANGE_TIMEOUT ]; then
-                      echo "WARNING: Update has been in Creating state for too long"
-                      echo "Start time: $CREATION_TIME"
-                      echo "Elapsed time: ${elapsed_time}s"
-                      if [ ! -z "$LAST_UPDATE_REASON" ]; then
-                        echo "Last update reason: $LAST_UPDATE_REASON"
-                      fi
-                      return 10
-                    fi
-                    
-                    # Track creation progress
-                    local progress_marker=$((elapsed_time / 30))
-                    printf "Progress: [%-20s] %ds\n" "$(printf '#%.0s' $(seq 1 $progress_marker))" "$elapsed_time"
-                    
                     return 9
                     ;;
                   "Successful")
@@ -455,21 +424,12 @@ jobs:
                   echo "  - Last modified: $LAST_MODIFIED"
                   return 0
                   ;;
-                1|9|10)  # Handle pending, creating, and timeout states
-                  # Track creation/update progress with enhanced monitoring
+                1|9)  # Handle both pending and creating states
+                  # Track creation/update progress
                   if [ "$STATE" = "Creating" ] || [ "$LAST_UPDATE" = "Creating" ]; then
                     if [ $creation_start_time -eq 0 ]; then
                       creation_start_time=$current_time
                       echo "Function creation/update started at $(date -d @$creation_start_time)"
-                      echo "Monitoring state transitions and progress..."
-                    fi
-                      
-                    # Check for timeout in Creating state
-                    if [ $check_status -eq 10 ]; then
-                      echo "WARNING: Creation state timeout detected"
-                      echo "Consider checking CloudWatch logs for issues"
-                      # Continue but with increased wait time
-                      wait_seconds=$max_wait
                     fi
                     
                     local progress_duration=$((current_time - creation_start_time))
@@ -568,14 +528,13 @@ jobs:
             return 1
           }
           
-          # Set deployment configuration with improved timeouts and retries
-          export MAX_RETRIES=12          # Increased from 8 to handle more retries
-          export INITIAL_WAIT=15         # Increased from 10 to give more time between retries
-          export MAX_WAIT=120           # Increased from 90 to allow longer waits for complex state transitions
-          export MAX_ATTEMPTS=60        # Increased from 45 to allow more attempts
-          export TIMEOUT_SECONDS=900    # Increased from 600 to allow longer total deployment time
-          export BACKOFF_MULTIPLIER=2   # Maintained for exponential backoff
-          export STATE_CHANGE_TIMEOUT=300 # New: Maximum time to wait in a single state
+          # Set deployment configuration
+          export MAX_RETRIES=8
+          export INITIAL_WAIT=10
+          export MAX_WAIT=90
+          export MAX_ATTEMPTS=45
+          export TIMEOUT_SECONDS=600
+          export BACKOFF_MULTIPLIER=2
 
           # Initial state check before any updates
           echo "Performing initial Lambda state check..."
