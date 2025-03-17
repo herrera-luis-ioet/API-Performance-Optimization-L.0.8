@@ -242,9 +242,9 @@ jobs:
             echo "Checking Lambda function state..."
             
             # Get function details with error handling and retry for conflicts
-            local max_retries=8  # Increased retries for better reliability
+            local max_retries=5
             local retry_count=0
-            local retry_delay=10  # Increased initial delay
+            local retry_delay=5
             local backoff_multiplier=2
             
             while [ $retry_count -lt $max_retries ]; do
@@ -253,11 +253,11 @@ jobs:
               
               if [ $GET_STATUS -eq 0 ]; then
                 break
-              elif echo "$FUNCTION_DETAILS" | grep -q "ResourceConflictException\|TooManyRequestsException"; then
+              elif echo "$FUNCTION_DETAILS" | grep -q "ResourceConflictException"; then
                 retry_count=$((retry_count + 1))
                 if [ $retry_count -lt $max_retries ]; then
                   retry_delay=$((retry_delay * backoff_multiplier))
-                  echo "Resource conflict or throttling detected, retrying in ${retry_delay}s (attempt $retry_count/$max_retries)..."
+                  echo "ResourceConflictException detected, retrying in ${retry_delay}s (attempt $retry_count/$max_retries)..."
                   sleep $retry_delay
                   continue
                 fi
@@ -303,10 +303,6 @@ jobs:
                 echo "Lambda function is in Pending state"
                 return 1
                 ;;
-              "Creating")
-                echo "Lambda function is in Creating state"
-                return 1
-                ;;
               "Active")
                 case "$LAST_UPDATE" in
                   "Failed")
@@ -316,10 +312,6 @@ jobs:
                     ;;
                   "InProgress")
                     echo "Update is still in progress"
-                    return 1
-                    ;;
-                  "Creating")
-                    echo "Function creation is in progress"
                     return 1
                     ;;
                   "Successful")
@@ -344,15 +336,14 @@ jobs:
           
           # Function to wait for Lambda to be ready with enhanced error handling and backoff
           wait_for_lambda_ready() {
-            local max_attempts=45  # Increased max attempts
-            local initial_wait=15  # Increased initial wait time
-            local max_wait=90      # Increased maximum wait time
-            local timeout_seconds=600  # Increased timeout
+            local max_attempts=30
+            local initial_wait=10
+            local max_wait=60
+            local timeout_seconds=300
             local start_time=$(date +%s)
             local consecutive_conflicts=0
             local wait_seconds=$initial_wait
             local last_error=""
-            local creation_start_time=0
             
             echo "Waiting for Lambda function to be ready (timeout: ${timeout_seconds}s)..."
             
@@ -377,35 +368,21 @@ jobs:
                   return 0
                   ;;
                 1)
-                  # Track creation start time
-                  if [ "$STATE" = "Creating" ] && [ $creation_start_time -eq 0 ]; then
-                    creation_start_time=$(date +%s)
-                    echo "Function creation started at $(date -d @$creation_start_time)"
-                  fi
-                  
-                  # Calculate creation duration if applicable
-                  if [ $creation_start_time -ne 0 ]; then
-                    local creation_duration=$((current_time - creation_start_time))
-                    echo "Attempt $i/$max_attempts: Lambda not ready yet (${elapsed_time}s elapsed, creation time: ${creation_duration}s)"
-                  else
-                    echo "Attempt $i/$max_attempts: Lambda not ready yet (${elapsed_time}s elapsed)"
-                  fi
-                  
+                  echo "Attempt $i/$max_attempts: Lambda not ready yet (${elapsed_time}s elapsed)"
                   # Reset conflict counter on non-conflict status
                   consecutive_conflicts=0
                   wait_seconds=$initial_wait
                   ;;
                 2)
-                  if echo "$FUNCTION_DETAILS" | grep -q "ResourceConflictException\|TooManyRequestsException"; then
+                  if echo "$FUNCTION_DETAILS" | grep -q "ResourceConflictException"; then
                     consecutive_conflicts=$((consecutive_conflicts + 1))
-                    # Enhanced exponential backoff for conflicts with jitter
-                    local jitter=$((RANDOM % 5))
-                    wait_seconds=$(((initial_wait * 2 ** consecutive_conflicts) + jitter))
+                    # Enhanced exponential backoff for conflicts
+                    wait_seconds=$((initial_wait * 2 ** consecutive_conflicts))
                     if [ $wait_seconds -gt $max_wait ]; then
                       wait_seconds=$max_wait
                     fi
-                    echo "Resource conflict or throttling detected, increasing wait time to ${wait_seconds}s"
-                    last_error="Resource conflict/throttling after $consecutive_conflicts consecutive attempts"
+                    echo "ResourceConflictException detected, increasing wait time to ${wait_seconds}s"
+                    last_error="ResourceConflictException after $consecutive_conflicts consecutive attempts"
                   else
                     echo "ERROR: Failed to get Lambda status (${elapsed_time}s elapsed)"
                     last_error="$FUNCTION_DETAILS"
@@ -426,7 +403,6 @@ jobs:
                   echo "WARNING: Unexpected state encountered (${elapsed_time}s elapsed)"
                   last_error="Unexpected state - State: $STATE, Last update: $LAST_UPDATE"
                   # Continue trying as this might be temporary
-                  wait_seconds=$((initial_wait * 2))  # Increase wait time for unknown states
                   ;;
               esac
               
