@@ -23,6 +23,7 @@ class Product(Base):
     description: Mapped[Optional[str]] = Column(Text, nullable=True)
     sku: Mapped[str] = Column(String(50), nullable=False, unique=True, index=True)
     image: Mapped[Optional[str]] = Column(String(255), nullable=True)
+    mainImage: Mapped[Optional[str]] = Column(String(255), nullable=True)
     price: Mapped[Decimal] = Column(
         Numeric(precision=10, scale=2), nullable=False, default=0.0
     )

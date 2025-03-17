@@ -43,6 +43,12 @@ class ProductBase(BaseSchema):
         max_length=255,
         examples=["https://example.com/images/ergonomic-keyboard.jpg"]
     )
+    mainImage: Optional[str] = Field(
+        None,
+        description="URL or path to main product image",
+        max_length=255,
+        examples=["https://example.com/images/ergonomic-keyboard-main.jpg"]
+    )
     price: Decimal = Field(
         ..., 
         description="Product price", 
@@ -104,6 +110,7 @@ class ProductCreate(ProductBase, BaseCreateSchema):
                 "description": "Comfortable keyboard with ergonomic design",
                 "sku": "ERG-KB-001",
                 "image": "https://example.com/images/ergonomic-keyboard.jpg",
+                "mainImage": "https://example.com/images/ergonomic-keyboard-main.jpg",
                 "price": 99.99,
                 "stock_quantity": 100,
                 "category": "Electronics",
@@ -140,6 +147,11 @@ class ProductUpdate(BaseUpdateSchema):
     image: Optional[str] = Field(
         None,
         description="URL or path to product image",
+        max_length=255
+    )
+    mainImage: Optional[str] = Field(
+        None,
+        description="URL or path to main product image",
         max_length=255
     )
     price: Optional[Decimal] = Field(
@@ -191,6 +203,7 @@ class ProductUpdate(BaseUpdateSchema):
                 "price": 89.99,
                 "stock_quantity": 150,
                 "image": "https://example.com/images/updated-keyboard.jpg",
+                "mainImage": "https://example.com/images/updated-keyboard-main.jpg",
                 "is_active": True
             }
         }
@@ -211,6 +224,7 @@ class ProductRead(ProductBase, BaseReadSchema):
                 "description": "Comfortable keyboard with ergonomic design",
                 "sku": "ERG-KB-001",
                 "image": "https://example.com/images/ergonomic-keyboard.jpg",
+                "mainImage": "https://example.com/images/ergonomic-keyboard-main.jpg",
                 "price": 99.99,
                 "stock_quantity": 100,
                 "category": "Electronics",
