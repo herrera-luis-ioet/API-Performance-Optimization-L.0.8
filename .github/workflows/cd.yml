@@ -242,10 +242,11 @@ jobs:
             echo "Checking Lambda function state..."
             
             # Get function details with error handling and retry for conflicts
-            local max_retries=8  # Increased retries for better reliability
+            local max_retries=${MAX_RETRIES:-8}  # Configurable retries
             local retry_count=0
-            local retry_delay=10  # Increased initial delay
-            local backoff_multiplier=2
+            local retry_delay=${INITIAL_WAIT:-10}  # Configurable initial delay
+            local backoff_multiplier=${BACKOFF_MULTIPLIER:-2}
+            local jitter_max=5
             
             while [ $retry_count -lt $max_retries ]; do
               FUNCTION_DETAILS=$(aws lambda get-function --function-name $FUNCTION_NAME 2>&1)
@@ -256,8 +257,11 @@ jobs:
               elif echo "$FUNCTION_DETAILS" | grep -q "ResourceConflictException\|TooManyRequestsException"; then
                 retry_count=$((retry_count + 1))
                 if [ $retry_count -lt $max_retries ]; then
-                  retry_delay=$((retry_delay * backoff_multiplier))
+                  # Add jitter to backoff
+                  local jitter=$((RANDOM % jitter_max))
+                  retry_delay=$(((retry_delay * backoff_multiplier) + jitter))
                   echo "Resource conflict or throttling detected, retrying in ${retry_delay}s (attempt $retry_count/$max_retries)..."
+                  echo "Last error: $FUNCTION_DETAILS"
                   sleep $retry_delay
                   continue
                 fi
@@ -273,6 +277,7 @@ jobs:
             LAST_UPDATE_REASON=$(echo "$FUNCTION_DETAILS" | jq -r '.Configuration.LastUpdateStatusReasonCode')
             CODE_SHA=$(echo "$FUNCTION_DETAILS" | jq -r '.Configuration.CodeSha256')
             FUNCTION_ERROR=$(echo "$FUNCTION_DETAILS" | jq -r '.Configuration.LastUpdateStatusReason')
+            LAST_MODIFIED=$(echo "$FUNCTION_DETAILS" | jq -r '.Configuration.LastModified')
             
             # Validate extracted values with detailed error reporting
             if [ -z "$STATE" ] || [ "$STATE" = "null" ] || \
@@ -344,10 +349,11 @@ jobs:
           
           # Function to wait for Lambda to be ready with enhanced error handling and backoff
           wait_for_lambda_ready() {
-            local max_attempts=45  # Increased max attempts
-            local initial_wait=15  # Increased initial wait time
-            local max_wait=90      # Increased maximum wait time
-            local timeout_seconds=600  # Increased timeout
+            # Use environment variables or defaults for configuration
+            local max_attempts=${MAX_ATTEMPTS:-45}
+            local initial_wait=${INITIAL_WAIT:-15}
+            local max_wait=${MAX_WAIT:-90}
+            local timeout_seconds=${TIMEOUT_SECONDS:-600}
             local start_time=$(date +%s)
             local consecutive_conflicts=0
             local wait_seconds=$initial_wait
@@ -377,10 +383,18 @@ jobs:
                   return 0
                   ;;
                 1)
-                  # Track creation start time
-                  if [ "$STATE" = "Creating" ] && [ $creation_start_time -eq 0 ]; then
-                    creation_start_time=$(date +%s)
-                    echo "Function creation started at $(date -d @$creation_start_time)"
+                  # Track creation start time and state transitions
+                  if [ "$STATE" = "Creating" ]; then
+                    if [ $creation_start_time -eq 0 ]; then
+                      creation_start_time=$(date +%s)
+                      echo "Function creation started at $(date -d @$creation_start_time)"
+                    fi
+                    # Log state transition details
+                    echo "Creation State Details:"
+                    echo "  - Last Modified: $LAST_MODIFIED"
+                    echo "  - Current State: $STATE"
+                    echo "  - Update Status: $LAST_UPDATE"
+                    [ ! -z "$LAST_UPDATE_REASON" ] && echo "  - Update Reason: $LAST_UPDATE_REASON"
                   fi
                   
                   # Calculate creation duration if applicable
@@ -449,6 +463,14 @@ jobs:
             return 1
           }
           
+          # Set deployment configuration
+          export MAX_RETRIES=8
+          export INITIAL_WAIT=10
+          export MAX_WAIT=90
+          export MAX_ATTEMPTS=45
+          export TIMEOUT_SECONDS=600
+          export BACKOFF_MULTIPLIER=2
+
           # Initial state check before any updates
           echo "Performing initial Lambda state check..."
           wait_for_lambda_ready
