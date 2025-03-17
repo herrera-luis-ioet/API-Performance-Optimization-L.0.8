@@ -247,33 +247,27 @@ jobs:
             local retry_delay=${INITIAL_WAIT:-10}  # Configurable initial delay
             local backoff_multiplier=${BACKOFF_MULTIPLIER:-2}
             local jitter_max=5
-            local start_time=$(date +%s)
             
             while [ $retry_count -lt $max_retries ]; do
               FUNCTION_DETAILS=$(aws lambda get-function --function-name $FUNCTION_NAME 2>&1)
               GET_STATUS=$?
-              local current_time=$(date +%s)
-              local elapsed_time=$((current_time - start_time))
               
               if [ $GET_STATUS -eq 0 ]; then
                 break
               elif echo "$FUNCTION_DETAILS" | grep -q "ResourceConflictException\|TooManyRequestsException"; then
                 retry_count=$((retry_count + 1))
                 if [ $retry_count -lt $max_retries ]; then
-                  # Add jitter to backoff with elapsed time consideration
+                  # Add jitter to backoff
                   local jitter=$((RANDOM % jitter_max))
                   retry_delay=$(((retry_delay * backoff_multiplier) + jitter))
-                  echo "Resource conflict or throttling detected at ${elapsed_time}s, retrying in ${retry_delay}s (attempt $retry_count/$max_retries)..."
+                  echo "Resource conflict or throttling detected, retrying in ${retry_delay}s (attempt $retry_count/$max_retries)..."
                   echo "Last error: $FUNCTION_DETAILS"
                   sleep $retry_delay
                   continue
                 fi
-              elif echo "$FUNCTION_DETAILS" | grep -q "Function not found"; then
-                echo "Function not found - it may be in the process of creation"
-                return 8
               fi
               
-              echo "Error getting Lambda function details at ${elapsed_time}s: $FUNCTION_DETAILS"
+              echo "Error getting Lambda function details: $FUNCTION_DETAILS"
               return 2
             done
             
@@ -284,85 +278,72 @@ jobs:
             CODE_SHA=$(echo "$FUNCTION_DETAILS" | jq -r '.Configuration.CodeSha256')
             FUNCTION_ERROR=$(echo "$FUNCTION_DETAILS" | jq -r '.Configuration.LastUpdateStatusReason')
             LAST_MODIFIED=$(echo "$FUNCTION_DETAILS" | jq -r '.Configuration.LastModified')
-            CREATION_TIME=$(echo "$FUNCTION_DETAILS" | jq -r '.Configuration.LastModified')
             
-            # Enhanced validation with more detailed error reporting
+            # Validate extracted values with detailed error reporting
             if [ -z "$STATE" ] || [ "$STATE" = "null" ] || \
                [ -z "$LAST_UPDATE" ] || [ "$LAST_UPDATE" = "null" ]; then
-              echo "ERROR: Invalid state information received at ${elapsed_time}s"
+              echo "ERROR: Invalid state information received"
               echo "State: $STATE"
               echo "Last Update: $LAST_UPDATE"
               echo "Function Error: $FUNCTION_ERROR"
-              echo "Creation Time: $CREATION_TIME"
               return 5
             fi
             
-            echo "Current state: $STATE (at ${elapsed_time}s)"
+            echo "Current state: $STATE"
             echo "Last update status: $LAST_UPDATE"
             echo "Last update reason: $LAST_UPDATE_REASON"
             echo "Code SHA: $CODE_SHA"
-            echo "Last Modified: $LAST_MODIFIED"
             if [ ! -z "$FUNCTION_ERROR" ] && [ "$FUNCTION_ERROR" != "null" ]; then
               echo "Function error details: $FUNCTION_ERROR"
             fi
             
-            # Enhanced state validation with improved error codes and Creating state handling
+            # Enhanced state validation with specific error codes
             case "$STATE" in
               "Failed")
                 echo "ERROR: Lambda function is in Failed state"
                 echo "Failure reason: $FUNCTION_ERROR"
-                echo "Last Modified: $LAST_MODIFIED"
                 return 3
                 ;;
               "Pending")
                 echo "Lambda function is in Pending state"
-                echo "Last Modified: $LAST_MODIFIED"
                 return 1
                 ;;
               "Creating")
                 echo "Lambda function is in Creating state"
-                echo "Creation started at: $CREATION_TIME"
-                echo "Elapsed time since last modification: ${elapsed_time}s"
-                return 9
+                return 1
                 ;;
               "Active")
                 case "$LAST_UPDATE" in
                   "Failed")
                     echo "ERROR: Last update failed with reason: $LAST_UPDATE_REASON"
                     echo "Error details: $FUNCTION_ERROR"
-                    echo "Last Modified: $LAST_MODIFIED"
                     return 4
                     ;;
                   "InProgress")
-                    echo "Update is still in progress (started at: $LAST_MODIFIED)"
+                    echo "Update is still in progress"
                     return 1
                     ;;
                   "Creating")
-                    echo "Function creation is in progress (started at: $CREATION_TIME)"
-                    echo "Elapsed time: ${elapsed_time}s"
-                    return 9
+                    echo "Function creation is in progress"
+                    return 1
                     ;;
                   "Successful")
                     echo "Lambda function is in desired state"
-                    echo "Last successful update: $LAST_MODIFIED"
                     return 0
                     ;;
                   *)
                     echo "WARNING: Unknown last update status: $LAST_UPDATE"
-                    echo "Last Modified: $LAST_MODIFIED"
                     return 6
                     ;;
                 esac
                 ;;
               *)
                 echo "WARNING: Unknown function state: $STATE"
-                echo "Last Modified: $LAST_MODIFIED"
                 return 7
                 ;;
             esac
             
             echo "Lambda function is not in desired state"
-            echo "Last Modified: $LAST_MODIFIED"
             return 1
           }
           
@@ -378,9 +359,6 @@ jobs:
             local wait_seconds=$initial_wait
             local last_error=""
             local creation_start_time=0
-            local last_state=""
-            local state_change_time=0
-            local state_duration=0
             
             echo "Waiting for Lambda function to be ready (timeout: ${timeout_seconds}s)..."
             
@@ -390,9 +368,6 @@ jobs:
               
               if [ $elapsed_time -ge $timeout_seconds ]; then
                 echo "ERROR: Global timeout reached after ${elapsed_time} seconds"
-                echo "State transition history:"
-                echo "  - Initial state: $last_state"
-                echo "  - Last state change: $state_duration seconds ago"
                 if [ ! -z "$last_error" ]; then
                   echo "Last error encountered: $last_error"
                 fi
@@ -402,55 +377,37 @@ jobs:
               check_lambda_state
               local check_status=$?
               
-              # Track state transitions
-              if [ "$STATE" != "$last_state" ]; then
-                if [ ! -z "$last_state" ]; then
-                  echo "State transition: $last_state -> $STATE"
-                  state_duration=$((current_time - state_change_time))
-                  echo "Previous state duration: ${state_duration}s"
-                fi
-                last_state="$STATE"
-                state_change_time=$current_time
-              fi
-              
               case $check_status in
                 0)
-                  local total_duration=$((current_time - start_time))
-                  echo "SUCCESS: Lambda function is ready after $i attempts"
-                  echo "Deployment statistics:"
-                  echo "  - Total duration: ${total_duration}s"
-                  echo "  - Final state: $STATE"
-                  echo "  - Last update: $LAST_UPDATE"
-                  echo "  - Last modified: $LAST_MODIFIED"
+                  echo "SUCCESS: Lambda function is ready after $i attempts (${elapsed_time}s elapsed)"
                   return 0
                   ;;
-                1|9)  # Handle both pending and creating states
-                  # Track creation/update progress
-                  if [ "$STATE" = "Creating" ] || [ "$LAST_UPDATE" = "Creating" ]; then
+                1)
+                  # Track creation start time and state transitions
+                  if [ "$STATE" = "Creating" ]; then
                     if [ $creation_start_time -eq 0 ]; then
-                      creation_start_time=$current_time
-                      echo "Function creation/update started at $(date -d @$creation_start_time)"
+                      creation_start_time=$(date +%s)
+                      echo "Function creation started at $(date -d @$creation_start_time)"
                     fi
-                    
-                    local progress_duration=$((current_time - creation_start_time))
-                    echo "Creation/Update Progress:"
-                    echo "  - Duration: ${progress_duration}s"
-                    echo "  - State: $STATE"
+                    # Log state transition details
+                    echo "Creation State Details:"
+                    echo "  - Last Modified: $LAST_MODIFIED"
+                    echo "  - Current State: $STATE"
                     echo "  - Update Status: $LAST_UPDATE"
-                    [ ! -z "$LAST_UPDATE_REASON" ] && echo "  - Status Reason: $LAST_UPDATE_REASON"
-                    
-                    # Adjust wait time based on creation duration
-                    if [ $progress_duration -gt 60 ]; then
-                      wait_seconds=$((initial_wait * 2))  # Increase wait time for longer operations
-                    fi
+                    [ ! -z "$LAST_UPDATE_REASON" ] && echo "  - Update Reason: $LAST_UPDATE_REASON"
+                  fi
+                  
+                  # Calculate creation duration if applicable
+                  if [ $creation_start_time -ne 0 ]; then
+                    local creation_duration=$((current_time - creation_start_time))
+                    echo "Attempt $i/$max_attempts: Lambda not ready yet (${elapsed_time}s elapsed, creation time: ${creation_duration}s)"
                   else
                     echo "Attempt $i/$max_attempts: Lambda not ready yet (${elapsed_time}s elapsed)"
-                    echo "Current state: $STATE"
-                    echo "Update status: $LAST_UPDATE"
                   fi
                   
                   # Reset conflict counter on non-conflict status
                   consecutive_conflicts=0
+                  wait_seconds=$initial_wait
                   ;;
                 2)
                   if echo "$FUNCTION_DETAILS" | grep -q "ResourceConflictException\|TooManyRequestsException"; then
@@ -461,9 +418,7 @@ jobs:
                     if [ $wait_seconds -gt $max_wait ]; then
                       wait_seconds=$max_wait
                     fi
-                    echo "Resource conflict or throttling detected (attempt $i):"
-                    echo "  - Consecutive conflicts: $consecutive_conflicts"
-                    echo "  - New wait time: ${wait_seconds}s"
+                    echo "Resource conflict or throttling detected, increasing wait time to ${wait_seconds}s"
                     last_error="Resource conflict/throttling after $consecutive_conflicts consecutive attempts"
                   else
                     echo "ERROR: Failed to get Lambda status (${elapsed_time}s elapsed)"
@@ -473,57 +428,37 @@ jobs:
                   ;;
                 3|4)
                   echo "ERROR: Lambda is in failed state (${elapsed_time}s elapsed)"
-                  echo "Failure details:"
-                  echo "  - State: $STATE"
-                  echo "  - Last update: $LAST_UPDATE"
-                  echo "  - Error reason: $LAST_UPDATE_REASON"
-                  echo "  - Function error: $FUNCTION_ERROR"
                   last_error="Function state: $STATE, Last update status: $LAST_UPDATE, Reason: $LAST_UPDATE_REASON"
                   return 4
                   ;;
                 5)
                   echo "ERROR: Invalid state information received (${elapsed_time}s elapsed)"
-                  echo "State validation errors:"
-                  echo "  - State: $STATE"
-                  echo "  - Last update: $LAST_UPDATE"
-                  echo "  - Creation time: $CREATION_TIME"
                   last_error="Invalid state data - State: $STATE, Last update: $LAST_UPDATE"
                   return 5
                   ;;
                 6|7)
                   echo "WARNING: Unexpected state encountered (${elapsed_time}s elapsed)"
-                  echo "State details:"
-                  echo "  - Current state: $STATE"
-                  echo "  - Last update: $LAST_UPDATE"
-                  echo "  - Last modified: $LAST_MODIFIED"
                   last_error="Unexpected state - State: $STATE, Last update: $LAST_UPDATE"
+                  # Continue trying as this might be temporary
                   wait_seconds=$((initial_wait * 2))  # Increase wait time for unknown states
-                  ;;
-                8)
-                  echo "Function not found, waiting for creation to start..."
-                  wait_seconds=$initial_wait
                   ;;
               esac
               
-              # Dynamic wait time calculation with remaining time consideration
+              # Dynamic wait time calculation based on remaining time
               local remaining_time=$((timeout_seconds - elapsed_time))
               if [ $remaining_time -lt $wait_seconds ]; then
                 wait_seconds=$remaining_time
               fi
               
               if [ $wait_seconds -gt 0 ]; then
-                echo "Next attempt in ${wait_seconds}s (${remaining_time}s remaining, attempt $i/$max_attempts)"
+                echo "Waiting ${wait_seconds} seconds before next attempt... (${remaining_time}s remaining)"
                 sleep $wait_seconds
               fi
             done
             
             echo "ERROR: Maximum attempts ($max_attempts) reached after ${elapsed_time}s"
-            echo "Deployment summary:"
-            echo "  - Total duration: ${elapsed_time}s"
-            echo "  - Final state: $STATE"
-            echo "  - Last update status: $LAST_UPDATE"
             if [ ! -z "$last_error" ]; then
-              echo "  - Last error: $last_error"
+              echo "Last error encountered: $last_error"
             fi
             return 1
           }
