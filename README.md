@@ -191,6 +191,137 @@ When the server is running, API documentation is available at:
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
 
+## AWS Lambda Deployment
+
+This API can be deployed to AWS Lambda using the Serverless Framework. The deployment configuration is defined in `serverless.yml`.
+
+### Prerequisites
+
+1. Install the Serverless Framework:
+   ```bash
+   npm install -g serverless
+   ```
+
+2. Configure AWS credentials:
+   ```bash
+   aws configure
+   ```
+
+3. Install the Serverless Python Requirements plugin:
+   ```bash
+   serverless plugin install -n serverless-python-requirements
+   ```
+
+### AWS Configuration
+
+Before deployment, ensure the following AWS resources are configured:
+
+1. VPC with at least two subnets
+2. Security Group for Lambda function
+3. Amazon RDS MySQL instance
+4. Amazon ElastiCache Redis cluster
+5. AWS Systems Manager Parameter Store entries:
+   ```
+   /api-perf/${stage}/redis/host
+   /api-perf/${stage}/redis/port
+   /api-perf/${stage}/mysql/host
+   /api-perf/${stage}/mysql/port
+   /api-perf/${stage}/mysql/user
+   /api-perf/${stage}/mysql/password
+   /api-perf/${stage}/mysql/database
+   /api-perf/${stage}/vpc/security-group-id
+   /api-perf/${stage}/vpc/subnet-id-1
+   /api-perf/${stage}/vpc/subnet-id-2
+   ```
+
+### Environment Setup
+
+1. Create a Python virtual environment:
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+   ```
+
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+### Deployment Steps
+
+1. Generate requirements.txt from poetry:
+   ```bash
+   poetry export -f requirements.txt --without-hashes > requirements.txt
+   ```
+
+2. Deploy to a specific stage (e.g., dev, staging, prod):
+   ```bash
+   serverless deploy --stage dev --region us-east-1
+   ```
+
+   Or use the default stage (dev):
+   ```bash
+   serverless deploy
+   ```
+
+3. To deploy to a different region:
+   ```bash
+   serverless deploy --region eu-west-1
+   ```
+
+### Testing the Deployed API
+
+1. After deployment, Serverless Framework will output the API endpoint URLs.
+
+2. Test the API using curl or any HTTP client:
+   ```bash
+   # Get products
+   curl https://<api-id>.execute-api.<region>.amazonaws.com/products
+
+   # Create a product (replace with your actual endpoint)
+   curl -X POST \
+     https://<api-id>.execute-api.<region>.amazonaws.com/products \
+     -H "Content-Type: application/json" \
+     -d '{"name": "Test Product", "price": 99.99}'
+   ```
+
+### Troubleshooting
+
+1. **Cold Start Issues**:
+   - The first request might be slower due to Lambda cold start
+   - Consider using Provisioned Concurrency for consistent performance
+
+2. **VPC Configuration**:
+   - Ensure Lambda has proper VPC access to RDS and ElastiCache
+   - Check security group rules allow necessary connections
+
+3. **Memory and Timeout**:
+   - Default configuration: 1024MB memory, 30s timeout
+   - Adjust in serverless.yml if needed
+
+4. **Logs**:
+   - View Lambda logs:
+     ```bash
+     serverless logs -f api
+     ```
+   - Stream logs in real-time:
+     ```bash
+     serverless logs -f api -t
+     ```
+
+5. **Common Issues**:
+   - Check IAM roles and permissions
+   - Verify Parameter Store values are correct
+   - Ensure VPC has internet access via NAT Gateway
+   - Confirm Python dependencies are properly packaged
+
+### Cleanup
+
+To remove the deployed service and all resources:
+```bash
+serverless remove --stage <stage-name>
+```
+
 ## License
 
 [MIT License](LICENSE)
