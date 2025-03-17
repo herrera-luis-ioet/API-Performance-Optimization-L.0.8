@@ -193,22 +193,32 @@ When the server is running, API documentation is available at:
 
 ## AWS Lambda Deployment
 
-This API can be deployed to AWS Lambda using the Serverless Framework. The deployment configuration is defined in `serverless.yml`.
+This API can be deployed to AWS Lambda using the Serverless Framework. The deployment is automated through GitHub Actions and triggered by version tags. The deployment configuration is defined in `serverless.yml`.
+
+### Deployment Triggers
+
+The Lambda deployment is triggered by version tags with the following format:
+- `v{major}.{minor}.{patch}` - Deploys to production (e.g., v1.2.3)
+- `v{major}.{minor}.{patch}-{stage}` - Deploys to specified stage (e.g., v1.2.3-dev)
+
+If no stage is specified in the tag, it defaults to 'prod'.
 
 ### Prerequisites
 
-1. Install the Serverless Framework:
+1. AWS credentials configured in GitHub Secrets:
+   - `AWS_ACCESS_KEY_ID`
+   - `AWS_SECRET_ACCESS_KEY`
+   - `AWS_REGION`
+
+2. For local deployment, install required tools:
    ```bash
+   # Install Serverless Framework
    npm install -g serverless
-   ```
 
-2. Configure AWS credentials:
-   ```bash
+   # Configure AWS credentials
    aws configure
-   ```
 
-3. Install the Serverless Python Requirements plugin:
-   ```bash
+   # Install Serverless Python Requirements plugin
    serverless plugin install -n serverless-python-requirements
    ```
 
@@ -216,25 +226,56 @@ This API can be deployed to AWS Lambda using the Serverless Framework. The deplo
 
 Before deployment, ensure the following AWS resources are configured:
 
-1. VPC with at least two subnets
-2. Security Group for Lambda function
-3. Amazon RDS MySQL instance
-4. Amazon ElastiCache Redis cluster
-5. AWS Systems Manager Parameter Store entries:
+1. VPC with at least two subnets in different availability zones
+2. Security Group for Lambda function with required access rules:
+   - Outbound access to RDS MySQL (3306)
+   - Outbound access to ElastiCache Redis (6379)
+   - Outbound access to internet via NAT Gateway
+3. Amazon RDS MySQL instance in the VPC
+4. Amazon ElastiCache Redis cluster in the VPC
+5. AWS Systems Manager Parameter Store entries (required for each stage):
    ```
-   /api-perf/${stage}/redis/host
-   /api-perf/${stage}/redis/port
-   /api-perf/${stage}/mysql/host
-   /api-perf/${stage}/mysql/port
-   /api-perf/${stage}/mysql/user
-   /api-perf/${stage}/mysql/password
-   /api-perf/${stage}/mysql/database
-   /api-perf/${stage}/vpc/security-group-id
-   /api-perf/${stage}/vpc/subnet-id-1
-   /api-perf/${stage}/vpc/subnet-id-2
+   /api-perf/${stage}/redis/host      # Redis endpoint
+   /api-perf/${stage}/redis/port      # Redis port (default: 6379)
+   /api-perf/${stage}/mysql/host      # RDS endpoint
+   /api-perf/${stage}/mysql/port      # RDS port (default: 3306)
+   /api-perf/${stage}/mysql/user      # Database username
+   /api-perf/${stage}/mysql/password  # Database password
+   /api-perf/${stage}/mysql/database  # Database name
+   /api-perf/${stage}/vpc/security-group-id  # Security group ID
+   /api-perf/${stage}/vpc/subnet-id-1        # First subnet ID
+   /api-perf/${stage}/vpc/subnet-id-2        # Second subnet ID
    ```
 
-### Environment Setup
+The Lambda function's IAM role will be automatically created with permissions to:
+- Access Parameter Store values
+- Connect to RDS
+- Connect to ElastiCache
+
+### Deployment Methods
+
+#### 1. Automated Deployment (Recommended)
+
+1. Create a new version tag:
+   ```bash
+   # For production deployment
+   git tag v1.2.3
+   
+   # For specific stage deployment
+   git tag v1.2.3-dev
+   ```
+
+2. Push the tag:
+   ```bash
+   git push origin v1.2.3
+   ```
+
+The GitHub Actions workflow will automatically:
+- Install dependencies
+- Generate requirements.txt from poetry
+- Deploy to AWS Lambda using Serverless Framework
+
+#### 2. Manual Deployment
 
 1. Create a Python virtual environment:
    ```bash
@@ -242,30 +283,24 @@ Before deployment, ensure the following AWS resources are configured:
    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
    ```
 
-2. Install dependencies:
+2. Install dependencies and export requirements:
    ```bash
-   pip install -r requirements.txt
-   ```
+   # Install dependencies
+   poetry install
 
-### Deployment Steps
-
-1. Generate requirements.txt from poetry:
-   ```bash
+   # Export requirements
    poetry export -f requirements.txt --without-hashes > requirements.txt
    ```
 
-2. Deploy to a specific stage (e.g., dev, staging, prod):
+3. Deploy using Serverless Framework:
    ```bash
+   # Deploy to specific stage and region
    serverless deploy --stage dev --region us-east-1
-   ```
 
-   Or use the default stage (dev):
-   ```bash
+   # Use default stage (dev)
    serverless deploy
-   ```
 
-3. To deploy to a different region:
-   ```bash
+   # Deploy to different region
    serverless deploy --region eu-west-1
    ```
 
@@ -275,45 +310,93 @@ Before deployment, ensure the following AWS resources are configured:
 
 2. Test the API using curl or any HTTP client:
    ```bash
-   # Get products
-   curl https://<api-id>.execute-api.<region>.amazonaws.com/products
+   # Get API endpoint from AWS Console or deployment output
+   export API_URL=https://<api-id>.execute-api.<region>.amazonaws.com
 
-   # Create a product (replace with your actual endpoint)
+   # Test endpoints
+   # Get products
+   curl ${API_URL}/products
+
+   # Create a product
    curl -X POST \
-     https://<api-id>.execute-api.<region>.amazonaws.com/products \
+     ${API_URL}/products \
      -H "Content-Type: application/json" \
      -d '{"name": "Test Product", "price": 99.99}'
+
+   # Get orders
+   curl ${API_URL}/orders
+
+   # Create an order
+   curl -X POST \
+     ${API_URL}/orders \
+     -H "Content-Type: application/json" \
+     -d '{"product_id": 1, "quantity": 2}'
    ```
 
-### Troubleshooting
+### Configuration and Performance
 
-1. **Cold Start Issues**:
-   - The first request might be slower due to Lambda cold start
-   - Consider using Provisioned Concurrency for consistent performance
+1. **Lambda Configuration** (defined in serverless.yml):
+   - Memory: 1024MB (adjustable)
+   - Timeout: 30 seconds (adjustable)
+   - Python Runtime: 3.9
+   - VPC: Required for RDS and ElastiCache access
+   - Layers: Python dependencies packaged as a Lambda layer
 
-2. **VPC Configuration**:
-   - Ensure Lambda has proper VPC access to RDS and ElastiCache
-   - Check security group rules allow necessary connections
-
-3. **Memory and Timeout**:
-   - Default configuration: 1024MB memory, 30s timeout
-   - Adjust in serverless.yml if needed
-
-4. **Logs**:
-   - View Lambda logs:
+2. **Cold Start Optimization**:
+   - First request may be slower due to cold start
+   - Options to minimize impact:
      ```bash
-     serverless logs -f api
-     ```
-   - Stream logs in real-time:
-     ```bash
-     serverless logs -f api -t
+     # Enable Provisioned Concurrency (recommended for production)
+     aws lambda put-provisioned-concurrency-config \
+       --function-name api-performance-optimization-${stage}-api \
+       --provisioned-concurrent-executions 2 \
+       --qualifier ${version}
      ```
 
-5. **Common Issues**:
-   - Check IAM roles and permissions
-   - Verify Parameter Store values are correct
-   - Ensure VPC has internet access via NAT Gateway
-   - Confirm Python dependencies are properly packaged
+3. **Monitoring and Logs**:
+   ```bash
+   # View function logs
+   serverless logs -f api
+
+   # Stream logs in real-time
+   serverless logs -f api -t
+
+   # Filter logs by time
+   serverless logs -f api --startTime 5h
+
+   # Filter logs by search term
+   serverless logs -f api --filter "Error"
+   ```
+
+### Troubleshooting Guide
+
+1. **Deployment Issues**:
+   - Check GitHub Actions logs for automated deployments
+   - Verify AWS credentials are correctly configured
+   - Ensure all required Parameter Store values exist
+   - Check Python dependencies in requirements.txt
+
+2. **Runtime Issues**:
+   - VPC Configuration:
+     - Verify security group rules
+     - Check subnet routing tables
+     - Ensure NAT Gateway is configured
+   - Database Connectivity:
+     - Test RDS connection string
+     - Verify Redis endpoint is accessible
+     - Check security group allows database ports
+
+3. **Performance Issues**:
+   - Monitor Lambda metrics in CloudWatch
+   - Check memory utilization
+   - Review execution duration
+   - Consider enabling X-Ray tracing
+
+4. **Common Error Solutions**:
+   - Timeout errors: Increase Lambda timeout in serverless.yml
+   - Memory errors: Increase Lambda memory allocation
+   - Connection errors: Check VPC and security group configuration
+   - Cold starts: Enable Provisioned Concurrency
 
 ### Cleanup
 
