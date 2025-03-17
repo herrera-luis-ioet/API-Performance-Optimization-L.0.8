@@ -193,7 +193,7 @@ When the server is running, API documentation is available at:
 
 ## AWS Lambda Deployment
 
-This API can be deployed to AWS Lambda using AWS CLI through GitHub Actions. The deployment is automated and triggered by version tags. The deployment process packages the application and its dependencies into a ZIP file, uploads it to S3, and updates the Lambda function.
+This API can be deployed to AWS Lambda using AWS CLI through GitHub Actions. The deployment is automated and triggered by version tags. The deployment process packages the application and its dependencies into a ZIP file and directly updates the Lambda function without using S3 as an intermediary.
 
 ### Deployment Triggers
 
@@ -206,8 +206,14 @@ The Lambda deployment is triggered by version tags with the following format:
    - `AWS_ACCESS_KEY_ID`: AWS access key for deployment
    - `AWS_SECRET_ACCESS_KEY`: AWS secret key for deployment
    - `AWS_REGION`: Target AWS region
-   - `AWS_S3_BUCKET`: S3 bucket for deployment packages
    - `AWS_LAMBDA_FUNCTION_NAME`: Name of the target Lambda function
+   - `PROD_DB_HOST`: Production database host
+   - `PROD_DB_PORT`: Production database port
+   - `PROD_DB_USER`: Production database username
+   - `PROD_DB_PASSWORD`: Production database password
+   - `PROD_DB_NAME`: Production database name
+   - `PROD_REDIS_HOST`: Production Redis host
+   - `PROD_REDIS_PORT`: Production Redis port
 
 2. For local deployment, install required tools:
    ```bash
@@ -229,25 +235,10 @@ Before deployment, ensure the following AWS resources are configured:
    - Outbound access to internet via NAT Gateway
 3. Amazon RDS MySQL instance in the VPC
 4. Amazon ElastiCache Redis cluster in the VPC
-5. S3 bucket for deployment packages
-6. Lambda function with appropriate IAM role and permissions:
-   - Access to S3 bucket
-   - Access to Parameter Store values
+5. Lambda function with appropriate IAM role and permissions:
+   - Access to CloudWatch Logs
    - Connect to RDS
    - Connect to ElastiCache
-7. AWS Systems Manager Parameter Store entries:
-   ```
-   /api-perf/redis/host      # Redis endpoint
-   /api-perf/redis/port      # Redis port (default: 6379)
-   /api-perf/mysql/host      # RDS endpoint
-   /api-perf/mysql/port      # RDS port (default: 3306)
-   /api-perf/mysql/user      # Database username
-   /api-perf/mysql/password  # Database password
-   /api-perf/mysql/database  # Database name
-   /api-perf/vpc/security-group-id  # Security group ID
-   /api-perf/vpc/subnet-id-1        # First subnet ID
-   /api-perf/vpc/subnet-id-2        # Second subnet ID
-   ```
 
 ### Deployment Methods
 
@@ -266,8 +257,8 @@ Before deployment, ensure the following AWS resources are configured:
 The GitHub Actions workflow will automatically:
 - Install dependencies
 - Generate deployment package
-- Upload package to S3
-- Update Lambda function code
+- Update Lambda function code directly
+- Configure environment variables
 - Publish new version
 
 #### 2. Manual Deployment
@@ -297,14 +288,10 @@ The GitHub Actions workflow will automatically:
 
 3. Deploy using AWS CLI:
    ```bash
-   # Upload to S3
-   aws s3 cp lambda-package.zip s3://your-bucket/deployments/v1.2.3/lambda-package.zip
-
-   # Update Lambda function
+   # Update Lambda function code directly
    aws lambda update-function-code \
      --function-name your-function-name \
-     --s3-bucket your-bucket \
-     --s3-key deployments/v1.2.3/lambda-package.zip
+     --zip-file fileb://lambda-package.zip
 
    # Update configuration if needed
    aws lambda update-function-configuration \
@@ -312,7 +299,21 @@ The GitHub Actions workflow will automatically:
      --handler app.main.handler \
      --runtime python3.9 \
      --timeout 30 \
-     --memory-size 256
+     --memory-size 256 \
+     --environment Variables="{
+       STAGE=production,
+       DB_HOST=your-db-host,
+       DB_PORT=3306,
+       DB_USER=your-db-user,
+       DB_PASSWORD=your-db-password,
+       DB_NAME=your-db-name,
+       REDIS_HOST=your-redis-host,
+       REDIS_PORT=6379
+     }"
+
+   # Wait for update to complete
+   aws lambda wait function-updated \
+     --function-name your-function-name
 
    # Publish new version
    aws lambda publish-version \
@@ -401,7 +402,6 @@ The GitHub Actions workflow will automatically:
 1. **Deployment Issues**:
    - Check GitHub Actions logs for automated deployments
    - Verify AWS credentials and permissions
-   - Ensure S3 bucket exists and is accessible
    - Validate deployment package size (max 50MB compressed)
    - Check Python dependencies in requirements.txt
 
@@ -448,9 +448,6 @@ aws lambda delete-function --function-name ${AWS_LAMBDA_FUNCTION_NAME}
 # Delete CloudWatch log group
 aws logs delete-log-group \
   --log-group-name /aws/lambda/${AWS_LAMBDA_FUNCTION_NAME}
-
-# Delete deployment packages from S3
-aws s3 rm s3://${AWS_S3_BUCKET}/deployments/ --recursive
 ```
 
 ## License
