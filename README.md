@@ -193,33 +193,29 @@ When the server is running, API documentation is available at:
 
 ## AWS Lambda Deployment
 
-This API can be deployed to AWS Lambda using the Serverless Framework. The deployment is automated through GitHub Actions and triggered by version tags. The deployment configuration is defined in `serverless.yml`.
+This API can be deployed to AWS Lambda using AWS CLI through GitHub Actions. The deployment is automated and triggered by version tags. The deployment process packages the application and its dependencies into a ZIP file, uploads it to S3, and updates the Lambda function.
 
 ### Deployment Triggers
 
 The Lambda deployment is triggered by version tags with the following format:
 - `v{major}.{minor}.{patch}` - Deploys to production (e.g., v1.2.3)
-- `v{major}.{minor}.{patch}-{stage}` - Deploys to specified stage (e.g., v1.2.3-dev)
-
-If no stage is specified in the tag, it defaults to 'prod'.
 
 ### Prerequisites
 
-1. AWS credentials configured in GitHub Secrets:
-   - `AWS_ACCESS_KEY_ID`
-   - `AWS_SECRET_ACCESS_KEY`
-   - `AWS_REGION`
+1. AWS credentials and configuration in GitHub Secrets:
+   - `AWS_ACCESS_KEY_ID`: AWS access key for deployment
+   - `AWS_SECRET_ACCESS_KEY`: AWS secret key for deployment
+   - `AWS_REGION`: Target AWS region
+   - `AWS_S3_BUCKET`: S3 bucket for deployment packages
+   - `AWS_LAMBDA_FUNCTION_NAME`: Name of the target Lambda function
 
 2. For local deployment, install required tools:
    ```bash
-   # Install Serverless Framework
-   npm install -g serverless
+   # Install AWS CLI
+   pip install awscli
 
    # Configure AWS credentials
    aws configure
-
-   # Install Serverless Python Requirements plugin
-   serverless plugin install -n serverless-python-requirements
    ```
 
 ### AWS Configuration
@@ -233,24 +229,25 @@ Before deployment, ensure the following AWS resources are configured:
    - Outbound access to internet via NAT Gateway
 3. Amazon RDS MySQL instance in the VPC
 4. Amazon ElastiCache Redis cluster in the VPC
-5. AWS Systems Manager Parameter Store entries (required for each stage):
+5. S3 bucket for deployment packages
+6. Lambda function with appropriate IAM role and permissions:
+   - Access to S3 bucket
+   - Access to Parameter Store values
+   - Connect to RDS
+   - Connect to ElastiCache
+7. AWS Systems Manager Parameter Store entries:
    ```
-   /api-perf/${stage}/redis/host      # Redis endpoint
-   /api-perf/${stage}/redis/port      # Redis port (default: 6379)
-   /api-perf/${stage}/mysql/host      # RDS endpoint
-   /api-perf/${stage}/mysql/port      # RDS port (default: 3306)
-   /api-perf/${stage}/mysql/user      # Database username
-   /api-perf/${stage}/mysql/password  # Database password
-   /api-perf/${stage}/mysql/database  # Database name
-   /api-perf/${stage}/vpc/security-group-id  # Security group ID
-   /api-perf/${stage}/vpc/subnet-id-1        # First subnet ID
-   /api-perf/${stage}/vpc/subnet-id-2        # Second subnet ID
+   /api-perf/redis/host      # Redis endpoint
+   /api-perf/redis/port      # Redis port (default: 6379)
+   /api-perf/mysql/host      # RDS endpoint
+   /api-perf/mysql/port      # RDS port (default: 3306)
+   /api-perf/mysql/user      # Database username
+   /api-perf/mysql/password  # Database password
+   /api-perf/mysql/database  # Database name
+   /api-perf/vpc/security-group-id  # Security group ID
+   /api-perf/vpc/subnet-id-1        # First subnet ID
+   /api-perf/vpc/subnet-id-2        # Second subnet ID
    ```
-
-The Lambda function's IAM role will be automatically created with permissions to:
-- Access Parameter Store values
-- Connect to RDS
-- Connect to ElastiCache
 
 ### Deployment Methods
 
@@ -258,11 +255,7 @@ The Lambda function's IAM role will be automatically created with permissions to
 
 1. Create a new version tag:
    ```bash
-   # For production deployment
    git tag v1.2.3
-   
-   # For specific stage deployment
-   git tag v1.2.3-dev
    ```
 
 2. Push the tag:
@@ -272,8 +265,10 @@ The Lambda function's IAM role will be automatically created with permissions to
 
 The GitHub Actions workflow will automatically:
 - Install dependencies
-- Generate requirements.txt from poetry
-- Deploy to AWS Lambda using Serverless Framework
+- Generate deployment package
+- Upload package to S3
+- Update Lambda function code
+- Publish new version
 
 #### 2. Manual Deployment
 
@@ -283,35 +278,56 @@ The GitHub Actions workflow will automatically:
    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
    ```
 
-2. Install dependencies and export requirements:
+2. Install dependencies and create deployment package:
    ```bash
    # Install dependencies
    poetry install
 
    # Export requirements
    poetry export -f requirements.txt --without-hashes > requirements.txt
+
+   # Create deployment package
+   mkdir -p deployment-package
+   pip install -r requirements.txt --target deployment-package
+   cp -r app/* deployment-package/
+   cd deployment-package
+   zip -r ../lambda-package.zip .
+   cd ..
    ```
 
-3. Deploy using Serverless Framework:
+3. Deploy using AWS CLI:
    ```bash
-   # Deploy to specific stage and region
-   serverless deploy --stage dev --region us-east-1
+   # Upload to S3
+   aws s3 cp lambda-package.zip s3://your-bucket/deployments/v1.2.3/lambda-package.zip
 
-   # Use default stage (dev)
-   serverless deploy
+   # Update Lambda function
+   aws lambda update-function-code \
+     --function-name your-function-name \
+     --s3-bucket your-bucket \
+     --s3-key deployments/v1.2.3/lambda-package.zip
 
-   # Deploy to different region
-   serverless deploy --region eu-west-1
+   # Update configuration if needed
+   aws lambda update-function-configuration \
+     --function-name your-function-name \
+     --handler app.main.handler \
+     --runtime python3.9 \
+     --timeout 30 \
+     --memory-size 256
+
+   # Publish new version
+   aws lambda publish-version \
+     --function-name your-function-name \
+     --description "Deployment of version v1.2.3"
    ```
 
 ### Testing the Deployed API
 
-1. After deployment, Serverless Framework will output the API endpoint URLs.
+1. After deployment, get the API endpoint URL from the AWS Console or Lambda function configuration.
 
 2. Test the API using curl or any HTTP client:
    ```bash
-   # Get API endpoint from AWS Console or deployment output
-   export API_URL=https://<api-id>.execute-api.<region>.amazonaws.com
+   # Get API endpoint from AWS Console
+   export API_URL=https://<api-id>.lambda-url.<region>.on.aws
 
    # Test endpoints
    # Get products
@@ -335,12 +351,12 @@ The GitHub Actions workflow will automatically:
 
 ### Configuration and Performance
 
-1. **Lambda Configuration** (defined in serverless.yml):
-   - Memory: 1024MB (adjustable)
-   - Timeout: 30 seconds (adjustable)
+1. **Lambda Configuration**:
+   - Memory: 256MB (configurable via AWS CLI)
+   - Timeout: 30 seconds (configurable via AWS CLI)
    - Python Runtime: 3.9
    - VPC: Required for RDS and ElastiCache access
-   - Layers: Python dependencies packaged as a Lambda layer
+   - Handler: app.main.handler
 
 2. **Cold Start Optimization**:
    - First request may be slower due to cold start
@@ -348,32 +364,45 @@ The GitHub Actions workflow will automatically:
      ```bash
      # Enable Provisioned Concurrency (recommended for production)
      aws lambda put-provisioned-concurrency-config \
-       --function-name api-performance-optimization-${stage}-api \
+       --function-name ${AWS_LAMBDA_FUNCTION_NAME} \
        --provisioned-concurrent-executions 2 \
-       --qualifier ${version}
+       --qualifier ${VERSION}
      ```
 
 3. **Monitoring and Logs**:
    ```bash
    # View function logs
-   serverless logs -f api
+   aws logs get-log-events \
+     --log-group-name /aws/lambda/${AWS_LAMBDA_FUNCTION_NAME} \
+     --log-stream-name $(aws logs describe-log-streams \
+       --log-group-name /aws/lambda/${AWS_LAMBDA_FUNCTION_NAME} \
+       --order-by LastEventTime \
+       --descending \
+       --limit 1 \
+       --query 'logStreams[0].logStreamName' \
+       --output text)
 
-   # Stream logs in real-time
-   serverless logs -f api -t
+   # Watch logs in real-time
+   aws logs tail /aws/lambda/${AWS_LAMBDA_FUNCTION_NAME} --follow
 
    # Filter logs by time
-   serverless logs -f api --startTime 5h
+   aws logs filter-log-events \
+     --log-group-name /aws/lambda/${AWS_LAMBDA_FUNCTION_NAME} \
+     --start-time $(date -d '5 hours ago' +%s000)
 
-   # Filter logs by search term
-   serverless logs -f api --filter "Error"
+   # Filter logs by pattern
+   aws logs filter-log-events \
+     --log-group-name /aws/lambda/${AWS_LAMBDA_FUNCTION_NAME} \
+     --filter-pattern "Error"
    ```
 
 ### Troubleshooting Guide
 
 1. **Deployment Issues**:
    - Check GitHub Actions logs for automated deployments
-   - Verify AWS credentials are correctly configured
-   - Ensure all required Parameter Store values exist
+   - Verify AWS credentials and permissions
+   - Ensure S3 bucket exists and is accessible
+   - Validate deployment package size (max 50MB compressed)
    - Check Python dependencies in requirements.txt
 
 2. **Runtime Issues**:
@@ -387,22 +416,41 @@ The GitHub Actions workflow will automatically:
      - Check security group allows database ports
 
 3. **Performance Issues**:
-   - Monitor Lambda metrics in CloudWatch
+   - Monitor Lambda metrics in CloudWatch:
+     ```bash
+     # Get function metrics
+     aws cloudwatch get-metric-statistics \
+       --namespace AWS/Lambda \
+       --metric-name Duration \
+       --dimensions Name=FunctionName,Value=${AWS_LAMBDA_FUNCTION_NAME} \
+       --start-time $(date -d '1 hour ago' -u +%Y-%m-%dT%H:%M:%SZ) \
+       --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
+       --period 300 \
+       --statistics Average Maximum
+     ```
    - Check memory utilization
    - Review execution duration
    - Consider enabling X-Ray tracing
 
 4. **Common Error Solutions**:
-   - Timeout errors: Increase Lambda timeout in serverless.yml
+   - Timeout errors: Increase Lambda timeout using update-function-configuration
    - Memory errors: Increase Lambda memory allocation
    - Connection errors: Check VPC and security group configuration
    - Cold starts: Enable Provisioned Concurrency
 
 ### Cleanup
 
-To remove the deployed service and all resources:
+To remove the deployed Lambda function and associated resources:
 ```bash
-serverless remove --stage <stage-name>
+# Delete Lambda function
+aws lambda delete-function --function-name ${AWS_LAMBDA_FUNCTION_NAME}
+
+# Delete CloudWatch log group
+aws logs delete-log-group \
+  --log-group-name /aws/lambda/${AWS_LAMBDA_FUNCTION_NAME}
+
+# Delete deployment packages from S3
+aws s3 rm s3://${AWS_S3_BUCKET}/deployments/ --recursive
 ```
 
 ## License
