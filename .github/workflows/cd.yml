@@ -367,25 +367,9 @@ jobs:
                       return 10
                     fi
                     
-                    # Enhanced progress tracking with detailed metrics
-                    local progress_marker=$((elapsed_time / PROGRESS_INTERVAL))
-                    local total_markers=20
-                    local progress_percentage=$((progress_marker * 100 / total_markers))
-                    printf "Progress: [%-${total_markers}s] %d%% (%ds)\n" \
-                      "$(printf '#%.0s' $(seq 1 $progress_marker))" \
-                      "$progress_percentage" \
-                      "$elapsed_time"
-                    
-                    # Display CloudWatch log insights if available
-                    if [ $((elapsed_time % 60)) -eq 0 ]; then
-                      echo "Checking CloudWatch logs for recent events..."
-                      aws logs get-log-events \
-                        --log-group-name "/aws/lambda/$FUNCTION_NAME" \
-                        --log-stream-name "\$LATEST" \
-                        --start-time $(($(date +%s) - 60))000 \
-                        --limit 5 2>/dev/null | \
-                      jq -r '.events[] | .message' || true
-                    fi
+                    # Track creation progress
+                    local progress_marker=$((elapsed_time / 30))
+                    printf "Progress: [%-20s] %ds\n" "$(printf '#%.0s' $(seq 1 $progress_marker))" "$elapsed_time"
                     
                     return 9
                     ;;
@@ -449,45 +433,15 @@ jobs:
               check_lambda_state
               local check_status=$?
               
-              # Enhanced state transition tracking with history
+              # Track state transitions
               if [ "$STATE" != "$last_state" ]; then
                 if [ ! -z "$last_state" ]; then
+                  echo "State transition: $last_state -> $STATE"
                   state_duration=$((current_time - state_change_time))
-                  
-                  # Log state transition with detailed metrics
-                  echo "State Transition Details:"
-                  echo "  From: $last_state"
-                  echo "  To: $STATE"
-                  echo "  Duration in previous state: ${state_duration}s"
-                  echo "  Total elapsed time: ${elapsed_time}s"
-                  echo "  Update status: $LAST_UPDATE"
-                  
-                  # Validate minimum state time
-                  if [ $state_duration -lt $MIN_STATE_TIME ]; then
-                    echo "WARNING: State changed too quickly (${state_duration}s < ${MIN_STATE_TIME}s minimum)"
-                    echo "This might indicate deployment instability"
-                  fi
-                  
-                  # Check CloudWatch logs around transition
-                  echo "Checking logs around state transition..."
-                  aws logs get-log-events \
-                    --log-group-name "/aws/lambda/$FUNCTION_NAME" \
-                    --log-stream-name "\$LATEST" \
-                    --start-time $(($(date +%s) - 30))000 \
-                    --limit 3 2>/dev/null | \
-                  jq -r '.events[] | "    " + .message' || true
+                  echo "Previous state duration: ${state_duration}s"
                 fi
-                
-                # Update state tracking
                 last_state="$STATE"
                 state_change_time=$current_time
-                
-                # Log new state context
-                echo "New State Context:"
-                echo "  State: $STATE"
-                echo "  Last Update: $LAST_UPDATE"
-                [ ! -z "$LAST_UPDATE_REASON" ] && echo "  Update Reason: $LAST_UPDATE_REASON"
-                echo "  Modified: $LAST_MODIFIED"
               fi
               
               case $check_status in
@@ -614,19 +568,14 @@ jobs:
             return 1
           }
           
-          # Set deployment configuration with enhanced timeouts and monitoring
-          export MAX_RETRIES=12          # Maximum number of retries for state checks
-          export INITIAL_WAIT=15         # Initial wait time between retries (seconds)
-          export MAX_WAIT=120            # Maximum wait time between retries (seconds)
-          export MAX_ATTEMPTS=60         # Maximum number of state check attempts
-          export TIMEOUT_SECONDS=900     # Global timeout for entire deployment (seconds)
-          export BACKOFF_MULTIPLIER=2    # Multiplier for exponential backoff
-          export STATE_CHANGE_TIMEOUT=300 # Maximum time to wait in a single state (seconds)
-          
-          # Additional monitoring parameters
-          export PROGRESS_INTERVAL=30    # Interval for progress updates (seconds)
-          export CONFLICT_MAX_RETRIES=5  # Maximum retries for conflict resolution
-          export MIN_STATE_TIME=10       # Minimum time to wait before state transition (seconds)
+          # Set deployment configuration with improved timeouts and retries
+          export MAX_RETRIES=12          # Increased from 8 to handle more retries
+          export INITIAL_WAIT=15         # Increased from 10 to give more time between retries
+          export MAX_WAIT=120           # Increased from 90 to allow longer waits for complex state transitions
+          export MAX_ATTEMPTS=60        # Increased from 45 to allow more attempts
+          export TIMEOUT_SECONDS=900    # Increased from 600 to allow longer total deployment time
+          export BACKOFF_MULTIPLIER=2   # Maintained for exponential backoff
+          export STATE_CHANGE_TIMEOUT=300 # New: Maximum time to wait in a single state
 
           # Initial state check before any updates
           echo "Performing initial Lambda state check..."
