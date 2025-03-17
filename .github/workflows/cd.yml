@@ -235,15 +235,50 @@ jobs:
         run: |
           # Extract version from tag
           VERSION=${{ github.ref_name }}
+          FUNCTION_NAME=${{ secrets.AWS_LAMBDA_FUNCTION_NAME }}
           
-          # Update Lambda function code directly with ZIP file
+          # Function to check Lambda state
+          check_lambda_state() {
+            STATE=$(aws lambda get-function --function-name $FUNCTION_NAME --query 'Configuration.State' --output text)
+            LAST_UPDATE=$(aws lambda get-function --function-name $FUNCTION_NAME --query 'Configuration.LastUpdateStatus' --output text)
+            echo "Current state: $STATE, Last update status: $LAST_UPDATE"
+            if [ "$STATE" = "Active" ] && [ "$LAST_UPDATE" = "Successful" ]; then
+              return 0
+            fi
+            return 1
+          }
+          
+          # Function to wait for Lambda to be ready
+          wait_for_lambda_ready() {
+            echo "Waiting for Lambda function to be ready..."
+            for i in {1..30}; do
+              if check_lambda_state; then
+                echo "Lambda function is ready"
+                return 0
+              fi
+              echo "Attempt $i: Lambda not ready yet, waiting 10 seconds..."
+              sleep 10
+            done
+            echo "Timeout waiting for Lambda to be ready"
+            return 1
+          }
+          
+          # Wait for Lambda to be ready before updates
+          wait_for_lambda_ready || exit 1
+          
+          # Update Lambda function code
+          echo "Updating Lambda function code..."
           aws lambda update-function-code \
-            --function-name ${{ secrets.AWS_LAMBDA_FUNCTION_NAME }} \
+            --function-name $FUNCTION_NAME \
             --zip-file fileb://lambda-package.zip
           
+          # Wait for code update to complete
+          wait_for_lambda_ready || exit 1
+          
           # Update Lambda configuration
+          echo "Updating Lambda function configuration..."
           aws lambda update-function-configuration \
-            --function-name ${{ secrets.AWS_LAMBDA_FUNCTION_NAME }} \
+            --function-name $FUNCTION_NAME \
             --handler app.main.handler \
             --runtime python3.9 \
             --timeout 30 \
@@ -259,11 +294,15 @@ jobs:
               REDIS_PORT=${{ secrets.PROD_REDIS_PORT }}
             }"
           
-          # Wait for update to complete
-          aws lambda wait function-updated \
-            --function-name ${{ secrets.AWS_LAMBDA_FUNCTION_NAME }}
+          # Wait for configuration update to complete
+          wait_for_lambda_ready || exit 1
           
           # Publish new version
+          echo "Publishing new version..."
           aws lambda publish-version \
-            --function-name ${{ secrets.AWS_LAMBDA_FUNCTION_NAME }} \
+            --function-name $FUNCTION_NAME \
             --description "Deployment of version $VERSION"
+          
+          # Final check to ensure everything is ready
+          wait_for_lambda_ready || exit 1
+          echo "Lambda deployment completed successfully"
