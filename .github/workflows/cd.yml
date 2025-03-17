@@ -237,22 +237,48 @@ jobs:
           VERSION=${{ github.ref_name }}
           FUNCTION_NAME=${{ secrets.AWS_LAMBDA_FUNCTION_NAME }}
           
-          # Function to check Lambda state with detailed status
+          # Function to check Lambda state with detailed status and conflict handling
           check_lambda_state() {
             echo "Checking Lambda function state..."
             
-            # Get function details with error handling
-            FUNCTION_DETAILS=$(aws lambda get-function --function-name $FUNCTION_NAME 2>&1)
-            if [ $? -ne 0 ]; then
+            # Get function details with error handling and retry for conflicts
+            local max_retries=3
+            local retry_count=0
+            local retry_delay=5
+            
+            while [ $retry_count -lt $max_retries ]; do
+              FUNCTION_DETAILS=$(aws lambda get-function --function-name $FUNCTION_NAME 2>&1)
+              GET_STATUS=$?
+              
+              if [ $GET_STATUS -eq 0 ]; then
+                break
+              elif echo "$FUNCTION_DETAILS" | grep -q "ResourceConflictException"; then
+                retry_count=$((retry_count + 1))
+                if [ $retry_count -lt $max_retries ]; then
+                  echo "ResourceConflictException detected, retrying in ${retry_delay}s (attempt $retry_count/$max_retries)..."
+                  sleep $retry_delay
+                  continue
+                fi
+              fi
+              
               echo "Error getting Lambda function details: $FUNCTION_DETAILS"
               return 2
-            fi
+            done
             
-            # Extract state information
+            # Extract and validate state information
             STATE=$(echo "$FUNCTION_DETAILS" | jq -r '.Configuration.State')
             LAST_UPDATE=$(echo "$FUNCTION_DETAILS" | jq -r '.Configuration.LastUpdateStatus')
             LAST_UPDATE_REASON=$(echo "$FUNCTION_DETAILS" | jq -r '.Configuration.LastUpdateStatusReasonCode')
             CODE_SHA=$(echo "$FUNCTION_DETAILS" | jq -r '.Configuration.CodeSha256')
+            
+            # Validate extracted values
+            if [ -z "$STATE" ] || [ "$STATE" = "null" ] || \
+               [ -z "$LAST_UPDATE" ] || [ "$LAST_UPDATE" = "null" ]; then
+              echo "ERROR: Invalid state information received"
+              echo "State: $STATE"
+              echo "Last Update: $LAST_UPDATE"
+              return 5
+            fi
             
             echo "Current state: $STATE"
             echo "Last update status: $LAST_UPDATE"
@@ -270,6 +296,12 @@ jobs:
               return 4
             fi
             
+            # Check for in-progress states
+            if [ "$STATE" = "Pending" ] || [ "$LAST_UPDATE" = "InProgress" ]; then
+              echo "Lambda function is in transition state"
+              return 1
+            fi
+            
             # Check for desired state
             if [ "$STATE" = "Active" ] && [ "$LAST_UPDATE" = "Successful" ]; then
               echo "Lambda function is in desired state"
@@ -280,12 +312,15 @@ jobs:
             return 1
           }
           
-          # Function to wait for Lambda to be ready with improved error handling
+          # Function to wait for Lambda to be ready with enhanced error handling and backoff
           wait_for_lambda_ready() {
             local max_attempts=30
-            local wait_seconds=10
+            local initial_wait=10
+            local max_wait=60
             local timeout_seconds=300
             local start_time=$(date +%s)
+            local consecutive_conflicts=0
+            local wait_seconds=$initial_wait
             
             echo "Waiting for Lambda function to be ready (timeout: ${timeout_seconds}s)..."
             
@@ -308,14 +343,31 @@ jobs:
                   ;;
                 1)
                   echo "Attempt $i/$max_attempts: Lambda not ready yet (${elapsed_time}s elapsed)"
+                  # Reset conflict counter on non-conflict status
+                  consecutive_conflicts=0
+                  wait_seconds=$initial_wait
                   ;;
                 2)
-                  echo "ERROR: Failed to get Lambda status (${elapsed_time}s elapsed)"
-                  return 3
+                  if echo "$FUNCTION_DETAILS" | grep -q "ResourceConflictException"; then
+                    consecutive_conflicts=$((consecutive_conflicts + 1))
+                    # Exponential backoff for conflicts
+                    wait_seconds=$((initial_wait * 2 ** consecutive_conflicts))
+                    if [ $wait_seconds -gt $max_wait ]; then
+                      wait_seconds=$max_wait
+                    fi
+                    echo "ResourceConflictException detected, increasing wait time to ${wait_seconds}s"
+                  else
+                    echo "ERROR: Failed to get Lambda status (${elapsed_time}s elapsed)"
+                    return 3
+                  fi
                   ;;
                 3|4)
                   echo "ERROR: Lambda is in failed state (${elapsed_time}s elapsed)"
                   return 4
+                  ;;
+                5)
+                  echo "ERROR: Invalid state information received (${elapsed_time}s elapsed)"
+                  return 5
                   ;;
               esac
               
