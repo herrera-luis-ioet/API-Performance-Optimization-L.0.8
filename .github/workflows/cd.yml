@@ -324,18 +324,61 @@ jobs:
                 echo "Creation started at: $CREATION_TIME"
                 echo "Elapsed time since last modification: ${elapsed_time}s"
                 
-                # Enhanced Creating state handling
+                # Enhanced Creating state handling with detailed progress tracking
                 if [ $elapsed_time -gt $STATE_CHANGE_TIMEOUT ]; then
                   echo "WARNING: Function has been in Creating state for too long"
                   echo "Creation time: $CREATION_TIME"
                   echo "Elapsed time: ${elapsed_time}s"
                   echo "This may indicate a stuck deployment"
+                  
+                  # Check for specific creating state conditions
+                  if [ ! -z "$LAST_UPDATE_REASON" ] && [ "$LAST_UPDATE_REASON" != "null" ]; then
+                    echo "Creation status reason: $LAST_UPDATE_REASON"
+                  fi
+                  
+                  # Additional diagnostics for stuck deployments
+                  echo "Checking recent CloudWatch metrics..."
+                  aws cloudwatch get-metric-statistics \
+                    --namespace AWS/Lambda \
+                    --metric-name Duration \
+                    --dimensions Name=FunctionName,Value=$FUNCTION_NAME \
+                    --start-time $(date -u -d "@$(($(date +%s) - 900))" +"%Y-%m-%dT%H:%M:%SZ") \
+                    --end-time $(date -u +"%Y-%m-%dT%H:%M:%SZ") \
+                    --period 60 \
+                    --statistics Average Maximum \
+                    2>/dev/null || true
+                  
                   return 10
                 fi
+                
+                # Enhanced progress tracking for Creating state
+                local progress_percent=$((elapsed_time * 100 / STATE_CHANGE_TIMEOUT))
+                echo "Creation Progress: ${progress_percent}%"
+                echo "Time remaining: $((STATE_CHANGE_TIMEOUT - elapsed_time))s"
                 
                 # Check for specific creating state conditions
                 if [ ! -z "$LAST_UPDATE_REASON" ] && [ "$LAST_UPDATE_REASON" != "null" ]; then
                   echo "Creation status reason: $LAST_UPDATE_REASON"
+                  
+                  # Additional validation for known issues
+                  if echo "$LAST_UPDATE_REASON" | grep -qiE "throttle|concurrency|resource"; then
+                    echo "WARNING: Potential resource constraints detected"
+                    echo "Consider adjusting concurrency limits or deployment timing"
+                  fi
+                fi
+                
+                # Monitor memory and CPU metrics during creation
+                if [ $((elapsed_time % 30)) -eq 0 ]; then
+                  echo "Checking resource utilization..."
+                  aws cloudwatch get-metric-statistics \
+                    --namespace AWS/Lambda \
+                    --metric-name MemoryUtilization \
+                    --dimensions Name=FunctionName,Value=$FUNCTION_NAME \
+                    --start-time $(date -u -d "@$(($(date +%s) - 300))" +"%Y-%m-%dT%H:%M:%SZ") \
+                    --end-time $(date -u +"%Y-%m-%dT%H:%M:%SZ") \
+                    --period 60 \
+                    --statistics Maximum \
+                    2>/dev/null || true
                 fi
                 
                 return 9
@@ -404,16 +447,36 @@ jobs:
                             "    " + .message
                           end' || true
                         
-                        # Check for specific error patterns in logs
+                        # Enhanced error pattern detection in logs
                         ERROR_COUNT=$(aws logs get-log-events \
                           --log-group-name "/aws/lambda/$FUNCTION_NAME" \
                           --log-stream-name "$LATEST_STREAM" \
                           --start-time $(($(date +%s) - 300))000 2>/dev/null | \
                         jq -r '.events[].message' | \
-                        grep -iE "error|exception|fail|timeout" | wc -l) || true
+                        grep -iE "$ERROR_PATTERN" | wc -l) || true
                         
+                        WARNING_COUNT=$(aws logs get-log-events \
+                          --log-group-name "/aws/lambda/$FUNCTION_NAME" \
+                          --log-stream-name "$LATEST_STREAM" \
+                          --start-time $(($(date +%s) - 300))000 2>/dev/null | \
+                        jq -r '.events[].message' | \
+                        grep -iE "$WARNING_PATTERN" | wc -l) || true
+                        
+                        # Enhanced error and warning reporting
                         if [ "$ERROR_COUNT" -gt 0 ]; then
                           echo "WARNING: Detected $ERROR_COUNT error patterns in recent logs"
+                          if [ "$ERROR_COUNT" -ge "$MAX_ERROR_THRESHOLD" ]; then
+                            echo "ALERT: Error count ($ERROR_COUNT) exceeds threshold ($MAX_ERROR_THRESHOLD)"
+                            echo "Consider investigating the deployment issues"
+                          fi
+                        fi
+                        
+                        if [ "$WARNING_COUNT" -gt 0 ]; then
+                          echo "NOTICE: Detected $WARNING_COUNT warning patterns in recent logs"
+                          if [ "$WARNING_COUNT" -ge "$MAX_WARNING_THRESHOLD" ]; then
+                            echo "CAUTION: Warning count ($WARNING_COUNT) exceeds threshold ($MAX_WARNING_THRESHOLD)"
+                            echo "Consider reviewing the deployment configuration"
+                          fi
                         fi
                       else
                         echo "No recent log streams found"
@@ -648,21 +711,27 @@ jobs:
           }
           
           # Set deployment configuration with enhanced timeouts and monitoring
+          # Core timeout and retry configuration
           export MAX_RETRIES=15          # Maximum number of retries for state checks
           export INITIAL_WAIT=20         # Initial wait time between retries (seconds)
           export MAX_WAIT=180            # Maximum wait time between retries (seconds)
           export MAX_ATTEMPTS=90         # Maximum number of state check attempts
           export TIMEOUT_SECONDS=1200    # Global timeout for entire deployment (seconds)
-          export BACKOFF_MULTIPLIER=2    # Multiplier for exponential backoff
           export STATE_CHANGE_TIMEOUT=600 # Maximum time to wait in a single state (seconds)
-          
-          # Additional monitoring parameters
-          export PROGRESS_INTERVAL=30    # Interval for progress updates (seconds)
-          export CONFLICT_MAX_RETRIES=8  # Maximum retries for conflict resolution
-          export MIN_STATE_TIME=15       # Minimum time to wait before state transition (seconds)
-          export CLOUDWATCH_CHECK_INTERVAL=45  # Interval for CloudWatch log checks (seconds)
+
+          # Enhanced monitoring and state transition parameters
+          export PROGRESS_INTERVAL=30     # Interval for progress updates (seconds)
+          export CONFLICT_MAX_RETRIES=10  # Maximum retries for conflict resolution
+          export MIN_STATE_TIME=20        # Minimum time to wait before state transition (seconds)
+          export CLOUDWATCH_CHECK_INTERVAL=30  # Interval for CloudWatch log checks (seconds)
           export CREATION_STATE_MAX_TIME=900   # Maximum time allowed in Creating state (seconds)
-          export STATE_TRANSITION_BUFFER=30    # Buffer time for state transitions (seconds)
+          export STATE_TRANSITION_BUFFER=45    # Buffer time for state transitions (seconds)
+          
+          # Error detection and pattern matching configuration
+          export ERROR_PATTERN="(?i)(error|exception|fail|timeout|invalid|crash)"
+          export WARNING_PATTERN="(?i)(warn|deprecated|high[ _]memory|high[ _]cpu)"
+          export MAX_ERROR_THRESHOLD=5    # Maximum number of errors before alerting
+          export MAX_WARNING_THRESHOLD=10 # Maximum number of warnings before alerting
 
           # Initial state check before any updates
           echo "Performing initial Lambda state check..."
