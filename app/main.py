@@ -1,6 +1,6 @@
 """Main application module.
 
-This module creates and configures the FastAPI application.
+This module creates and configures the FastAPI application and provides AWS Lambda handler.
 """
 
 import logging
@@ -8,6 +8,7 @@ from typing import Any, Dict
 
 import asyncio
 from fastapi import FastAPI, Request, status
+from mangum import Mangum
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -114,6 +115,9 @@ def create_application() -> FastAPI:
 
 # Create the FastAPI application
 app = create_application()
+
+# Create Lambda handler
+handler = Mangum(app, lifespan="off")
 
 
 # Initialize database and Redis on startup
