@@ -47,7 +47,7 @@ def sample_product():
         description="This is a test product",
         sku="TEST-SKU-123",
         price=Decimal("99.99"),
-        stock_quantity=100,
+        stock=100,
         category="Test Category",
         tags="test,product",
         is_active=True
@@ -86,7 +86,7 @@ async def test_product_serialization(redis_cache, sample_product, mock_redis_cli
         assert deserialized["name"] == "Test Product"
         assert deserialized["sku"] == "TEST-SKU-123"
         assert deserialized["price"] == 99.99  # Decimal is converted to float in JSON
-        assert deserialized["stock_quantity"] == 100
+        assert deserialized["stock"] == 100
         assert deserialized["category"] == "Test Category"
         assert deserialized["is_active"] is True
     except json.JSONDecodeError:
@@ -144,7 +144,7 @@ async def test_decimal_field_serialization(redis_cache, mock_redis_client):
         description="Product with various decimal values",
         sku="DECIMAL-TEST-001",
         price=Decimal("1234.56"),  # Standard decimal
-        stock_quantity=100,
+        stock=100,
         category="Test",
         is_active=True
     )

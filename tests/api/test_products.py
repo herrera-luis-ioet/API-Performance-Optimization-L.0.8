@@ -99,7 +99,7 @@ async def test_create_product(client: AsyncClient):
         "sku": "NEW-TEST-SKU",
         "image": "https://example.com/images/new-test-product.jpg",
         "price": 299.99,
-        "stock_quantity": 75,
+        "stock": 75,
         "category": "New Category",
         "tags": "new,test,product",
         "is_active": True
@@ -116,7 +116,7 @@ async def test_create_product(client: AsyncClient):
     assert data["sku"] == product_data["sku"]
     assert data["image"] == product_data["image"]
     assert Decimal(str(data["price"])) == Decimal(str(product_data["price"]))
-    assert data["stock_quantity"] == product_data["stock_quantity"]
+    assert data["stock"] == product_data["stock"]
     assert data["category"] == product_data["category"]
     assert data["tags"] == product_data["tags"]
     assert data["is_active"] == product_data["is_active"]

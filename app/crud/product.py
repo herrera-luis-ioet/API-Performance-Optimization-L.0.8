@@ -92,11 +92,11 @@ class ProductCRUD(BaseCRUD[Product, ProductCreate, ProductUpdate, ProductRead]):
             if not product:
                 return None
             
-            new_quantity = product.stock_quantity + quantity_change
+            new_quantity = product.stock + quantity_change
             if new_quantity < 0:
                 raise ValueError(f"Cannot reduce stock below zero for product {product_id}")
             
-            product.stock_quantity = new_quantity
+            product.stock = new_quantity
             db.add(product)
             await db.commit()
             await db.refresh(product)

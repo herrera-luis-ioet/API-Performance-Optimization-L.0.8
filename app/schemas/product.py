@@ -55,7 +55,7 @@ class ProductBase(BaseSchema):
         ge=0, 
         examples=[99.99]
     )
-    stock_quantity: int = Field(
+    stock: int = Field(
         0, 
         description="Available stock quantity", 
         ge=0,
@@ -112,7 +112,7 @@ class ProductCreate(ProductBase, BaseCreateSchema):
                 "image": "https://example.com/images/ergonomic-keyboard.jpg",
                 "mainImage": "https://example.com/images/ergonomic-keyboard-main.jpg",
                 "price": 99.99,
-                "stock_quantity": 100,
+                "stock": 100,
                 "category": "Electronics",
                 "tags": "ergonomic,keyboard,office",
                 "is_active": True
@@ -159,7 +159,7 @@ class ProductUpdate(BaseUpdateSchema):
         description="Product price", 
         ge=0
     )
-    stock_quantity: Optional[int] = Field(
+    stock: Optional[int] = Field(
         None, 
         description="Available stock quantity", 
         ge=0
@@ -201,7 +201,7 @@ class ProductUpdate(BaseUpdateSchema):
         "json_schema_extra": {
             "example": {
                 "price": 89.99,
-                "stock_quantity": 150,
+                "stock": 150,
                 "image": "https://example.com/images/updated-keyboard.jpg",
                 "mainImage": "https://example.com/images/updated-keyboard-main.jpg",
                 "is_active": True
@@ -226,7 +226,7 @@ class ProductRead(ProductBase, BaseReadSchema):
                 "image": "https://example.com/images/ergonomic-keyboard.jpg",
                 "mainImage": "https://example.com/images/ergonomic-keyboard-main.jpg",
                 "price": 99.99,
-                "stock_quantity": 100,
+                "stock": 100,
                 "category": "Electronics",
                 "tags": "ergonomic,keyboard,office",
                 "is_active": True,

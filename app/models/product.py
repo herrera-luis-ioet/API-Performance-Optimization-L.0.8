@@ -29,7 +29,7 @@ class Product(Base):
     )
     
     # Inventory information
-    stock_quantity: Mapped[int] = Column(Integer, nullable=False, default=0)
+    stock: Mapped[int] = Column(Integer, nullable=False, default=0)
     
     # Categorization
     category: Mapped[Optional[str]] = Column(String(100), nullable=True, index=True)
