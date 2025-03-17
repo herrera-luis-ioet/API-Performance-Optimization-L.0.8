@@ -237,135 +237,47 @@ jobs:
           VERSION=${{ github.ref_name }}
           FUNCTION_NAME=${{ secrets.AWS_LAMBDA_FUNCTION_NAME }}
           
-          # Function to check Lambda state with detailed status
+          # Function to check Lambda state
           check_lambda_state() {
-            echo "Checking Lambda function state..."
-            
-            # Get function details with error handling
-            FUNCTION_DETAILS=$(aws lambda get-function --function-name $FUNCTION_NAME 2>&1)
-            if [ $? -ne 0 ]; then
-              echo "Error getting Lambda function details: $FUNCTION_DETAILS"
-              return 2
-            fi
-            
-            # Extract state information
-            STATE=$(echo "$FUNCTION_DETAILS" | jq -r '.Configuration.State')
-            LAST_UPDATE=$(echo "$FUNCTION_DETAILS" | jq -r '.Configuration.LastUpdateStatus')
-            LAST_UPDATE_REASON=$(echo "$FUNCTION_DETAILS" | jq -r '.Configuration.LastUpdateStatusReasonCode')
-            CODE_SHA=$(echo "$FUNCTION_DETAILS" | jq -r '.Configuration.CodeSha256')
-            
-            echo "Current state: $STATE"
-            echo "Last update status: $LAST_UPDATE"
-            echo "Last update reason: $LAST_UPDATE_REASON"
-            echo "Code SHA: $CODE_SHA"
-            
-            # Check for error states
-            if [ "$STATE" = "Failed" ]; then
-              echo "ERROR: Lambda function is in Failed state"
-              return 3
-            fi
-            
-            if [ "$LAST_UPDATE" = "Failed" ]; then
-              echo "ERROR: Last update failed with reason: $LAST_UPDATE_REASON"
-              return 4
-            fi
-            
-            # Check for desired state
+            STATE=$(aws lambda get-function --function-name $FUNCTION_NAME --query 'Configuration.State' --output text)
+            LAST_UPDATE=$(aws lambda get-function --function-name $FUNCTION_NAME --query 'Configuration.LastUpdateStatus' --output text)
+            echo "Current state: $STATE, Last update status: $LAST_UPDATE"
             if [ "$STATE" = "Active" ] && [ "$LAST_UPDATE" = "Successful" ]; then
-              echo "Lambda function is in desired state"
               return 0
             fi
-            
-            echo "Lambda function is not in desired state"
             return 1
           }
           
-          # Function to wait for Lambda to be ready with improved error handling
+          # Function to wait for Lambda to be ready
           wait_for_lambda_ready() {
-            local max_attempts=30
-            local wait_seconds=10
-            local timeout_seconds=300
-            local start_time=$(date +%s)
-            
-            echo "Waiting for Lambda function to be ready (timeout: ${timeout_seconds}s)..."
-            
-            for ((i=1; i<=$max_attempts; i++)); do
-              local current_time=$(date +%s)
-              local elapsed_time=$((current_time - start_time))
-              
-              if [ $elapsed_time -ge $timeout_seconds ]; then
-                echo "ERROR: Global timeout reached after ${elapsed_time} seconds"
-                return 2
+            echo "Waiting for Lambda function to be ready..."
+            for i in {1..30}; do
+              if check_lambda_state; then
+                echo "Lambda function is ready"
+                return 0
               fi
-              
-              check_lambda_state
-              local check_status=$?
-              
-              case $check_status in
-                0)
-                  echo "SUCCESS: Lambda function is ready after $i attempts (${elapsed_time}s elapsed)"
-                  return 0
-                  ;;
-                1)
-                  echo "Attempt $i/$max_attempts: Lambda not ready yet (${elapsed_time}s elapsed)"
-                  ;;
-                2)
-                  echo "ERROR: Failed to get Lambda status (${elapsed_time}s elapsed)"
-                  return 3
-                  ;;
-                3|4)
-                  echo "ERROR: Lambda is in failed state (${elapsed_time}s elapsed)"
-                  return 4
-                  ;;
-              esac
-              
-              local remaining_time=$((timeout_seconds - elapsed_time))
-              if [ $remaining_time -lt $wait_seconds ]; then
-                wait_seconds=$remaining_time
-              fi
-              
-              if [ $wait_seconds -gt 0 ]; then
-                echo "Waiting ${wait_seconds} seconds before next attempt..."
-                sleep $wait_seconds
-              fi
+              echo "Attempt $i: Lambda not ready yet, waiting 10 seconds..."
+              sleep 10
             done
-            
-            echo "ERROR: Maximum attempts ($max_attempts) reached after ${elapsed_time}s"
+            echo "Timeout waiting for Lambda to be ready"
             return 1
           }
           
-          # Initial state check before any updates
-          echo "Performing initial Lambda state check..."
-          wait_for_lambda_ready
-          INITIAL_CHECK_STATUS=$?
-          if [ $INITIAL_CHECK_STATUS -ne 0 ]; then
-            echo "ERROR: Initial Lambda state check failed with status $INITIAL_CHECK_STATUS"
-            exit 1
-          fi
+          # Wait for Lambda to be ready before updates
+          wait_for_lambda_ready || exit 1
           
-          # Update Lambda function code with error handling
+          # Update Lambda function code
           echo "Updating Lambda function code..."
-          UPDATE_RESULT=$(aws lambda update-function-code \
+          aws lambda update-function-code \
             --function-name $FUNCTION_NAME \
-            --zip-file fileb://lambda-package.zip 2>&1)
+            --zip-file fileb://lambda-package.zip
           
-          if [ $? -ne 0 ]; then
-            echo "ERROR: Failed to update Lambda function code: $UPDATE_RESULT"
-            exit 1
-          fi
+          # Wait for code update to complete
+          wait_for_lambda_ready || exit 1
           
-          # Wait for code update to complete with enhanced error handling
-          echo "Waiting for code update to complete..."
-          wait_for_lambda_ready
-          CODE_UPDATE_STATUS=$?
-          if [ $CODE_UPDATE_STATUS -ne 0 ]; then
-            echo "ERROR: Code update verification failed with status $CODE_UPDATE_STATUS"
-            exit 1
-          fi
-          
-          # Update Lambda configuration with error handling
+          # Update Lambda configuration
           echo "Updating Lambda function configuration..."
-          CONFIG_UPDATE_RESULT=$(aws lambda update-function-configuration \
+          aws lambda update-function-configuration \
             --function-name $FUNCTION_NAME \
             --handler app.main.handler \
             --runtime python3.9 \
@@ -380,44 +292,17 @@ jobs:
               DB_NAME=${{ secrets.PROD_DB_NAME }},
               REDIS_HOST=${{ secrets.PROD_REDIS_HOST }},
               REDIS_PORT=${{ secrets.PROD_REDIS_PORT }}
-            }" 2>&1)
+            }"
           
-          if [ $? -ne 0 ]; then
-            echo "ERROR: Failed to update Lambda configuration: $CONFIG_UPDATE_RESULT"
-            exit 1
-          fi
+          # Wait for configuration update to complete
+          wait_for_lambda_ready || exit 1
           
-          # Wait for configuration update to complete with enhanced error handling
-          echo "Waiting for configuration update to complete..."
-          wait_for_lambda_ready
-          CONFIG_UPDATE_STATUS=$?
-          if [ $CONFIG_UPDATE_STATUS -ne 0 ]; then
-            echo "ERROR: Configuration update verification failed with status $CONFIG_UPDATE_STATUS"
-            exit 1
-          fi
-          
-          # Publish new version with error handling
+          # Publish new version
           echo "Publishing new version..."
-          PUBLISH_RESULT=$(aws lambda publish-version \
+          aws lambda publish-version \
             --function-name $FUNCTION_NAME \
-            --description "Deployment of version $VERSION" 2>&1)
+            --description "Deployment of version $VERSION"
           
-          if [ $? -ne 0 ]; then
-            echo "ERROR: Failed to publish new version: $PUBLISH_RESULT"
-            exit 1
-          fi
-          
-          # Final verification with enhanced error handling
-          echo "Performing final verification..."
-          wait_for_lambda_ready
-          FINAL_STATUS=$?
-          if [ $FINAL_STATUS -ne 0 ]; then
-            echo "ERROR: Final verification failed with status $FINAL_STATUS"
-            exit 1
-          fi
-          
-          echo "SUCCESS: Lambda deployment completed successfully"
-          
-          # Output final Lambda function state
-          echo "Final Lambda function state:"
-          check_lambda_state
+          # Final check to ensure everything is ready
+          wait_for_lambda_ready || exit 1
+          echo "Lambda deployment completed successfully"
