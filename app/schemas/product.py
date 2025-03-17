@@ -84,6 +84,12 @@ class ProductBase(BaseSchema):
         le=5,
         examples=[4]
     )
+    ratingCount: int = Field(
+        0,
+        description="Number of ratings received",
+        ge=0,
+        examples=[42]
+    )
     
     @field_validator("price")
     @classmethod
@@ -123,7 +129,8 @@ class ProductCreate(ProductBase, BaseCreateSchema):
                 "category": "Electronics",
                 "tags": "ergonomic,keyboard,office",
                 "is_active": True,
-                "rating": 4
+                "rating": 4,
+                "ratingCount": 0
             }
         }
     }
@@ -192,6 +199,11 @@ class ProductUpdate(BaseUpdateSchema):
         ge=1,
         le=5
     )
+    ratingCount: Optional[int] = Field(
+        None,
+        description="Number of ratings received",
+        ge=0
+    )
     
     @field_validator("price")
     @classmethod
@@ -245,6 +257,7 @@ class ProductRead(ProductBase, BaseReadSchema):
                 "tags": "ergonomic,keyboard,office",
                 "is_active": True,
                 "rating": 4,
+                "ratingCount": 42,
                 "created_at": "2023-01-01T00:00:00",
                 "updated_at": "2023-01-01T00:00:00"
             }

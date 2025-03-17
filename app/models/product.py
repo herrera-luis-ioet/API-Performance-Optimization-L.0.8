@@ -40,6 +40,7 @@ class Product(Base):
     
     # Rating
     rating: Mapped[Optional[int]] = Column(Integer, nullable=True)
+    ratingCount: Mapped[int] = Column(Integer, nullable=False, default=0)
     
     # Relationships
     order_items = relationship("OrderItem", back_populates="product")
