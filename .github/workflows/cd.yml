@@ -231,27 +231,33 @@ jobs:
           zip -r ../lambda-package.zip .
           cd ..
       
-      - name: Upload to S3 and update Lambda
+      - name: Update Lambda Function
         run: |
           # Extract version from tag
           VERSION=${{ github.ref_name }}
           
-          # Upload deployment package to S3
-          aws s3 cp lambda-package.zip s3://${{ secrets.AWS_S3_BUCKET }}/deployments/$VERSION/lambda-package.zip
-          
-          # Update Lambda function code
+          # Update Lambda function code directly with ZIP file
           aws lambda update-function-code \
             --function-name ${{ secrets.AWS_LAMBDA_FUNCTION_NAME }} \
-            --s3-bucket ${{ secrets.AWS_S3_BUCKET }} \
-            --s3-key deployments/$VERSION/lambda-package.zip
+            --zip-file fileb://lambda-package.zip
           
-          # Update Lambda configuration if needed
+          # Update Lambda configuration
           aws lambda update-function-configuration \
             --function-name ${{ secrets.AWS_LAMBDA_FUNCTION_NAME }} \
             --handler app.main.handler \
             --runtime python3.9 \
             --timeout 30 \
-            --memory-size 256
+            --memory-size 256 \
+            --environment Variables="{
+              STAGE=production,
+              DB_HOST=${{ secrets.PROD_DB_HOST }},
+              DB_PORT=${{ secrets.PROD_DB_PORT }},
+              DB_USER=${{ secrets.PROD_DB_USER }},
+              DB_PASSWORD=${{ secrets.PROD_DB_PASSWORD }},
+              DB_NAME=${{ secrets.PROD_DB_NAME }},
+              REDIS_HOST=${{ secrets.PROD_REDIS_HOST }},
+              REDIS_PORT=${{ secrets.PROD_REDIS_PORT }}
+            }"
           
           # Wait for update to complete
           aws lambda wait function-updated \
