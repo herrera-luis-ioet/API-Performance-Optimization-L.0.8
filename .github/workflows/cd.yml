@@ -205,9 +205,6 @@ jobs:
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
         run: poetry install --no-interaction --no-root
       
-      - name: Install Serverless Framework
-        run: npm install -g serverless@3
-      
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
@@ -215,17 +212,52 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
       
-      - name: Generate requirements.txt
+      - name: Generate deployment package
         run: |
-          poetry export -f requirements.txt --without-hashes > requirements.txt
-      
-      - name: Deploy to AWS Lambda
-        run: |
-          # Extract stage from tag (e.g., v1.2.3-prod -> prod, v1.2.3 -> prod)
-          STAGE=$(echo ${{ github.ref_name }} | sed -n 's/.*-\(.*\)/\1/p')
-          if [ -z "$STAGE" ]; then
-            STAGE="prod"
-          fi
+          # Create a temporary directory for the package
+          mkdir -p deployment-package
           
-          # Deploy using Serverless Framework
-          serverless deploy --stage $STAGE --verbose
+          # Export dependencies
+          poetry export -f requirements.txt --without-hashes > requirements.txt
+          
+          # Install dependencies into the package directory
+          pip install -r requirements.txt --target deployment-package
+          
+          # Copy application code
+          cp -r app/* deployment-package/
+          
+          # Create ZIP file
+          cd deployment-package
+          zip -r ../lambda-package.zip .
+          cd ..
+      
+      - name: Upload to S3 and update Lambda
+        run: |
+          # Extract version from tag
+          VERSION=${{ github.ref_name }}
+          
+          # Upload deployment package to S3
+          aws s3 cp lambda-package.zip s3://${{ secrets.AWS_S3_BUCKET }}/deployments/$VERSION/lambda-package.zip
+          
+          # Update Lambda function code
+          aws lambda update-function-code \
+            --function-name ${{ secrets.AWS_LAMBDA_FUNCTION_NAME }} \
+            --s3-bucket ${{ secrets.AWS_S3_BUCKET }} \
+            --s3-key deployments/$VERSION/lambda-package.zip
+          
+          # Update Lambda configuration if needed
+          aws lambda update-function-configuration \
+            --function-name ${{ secrets.AWS_LAMBDA_FUNCTION_NAME }} \
+            --handler app.main.handler \
+            --runtime python3.9 \
+            --timeout 30 \
+            --memory-size 256
+          
+          # Wait for update to complete
+          aws lambda wait function-updated \
+            --function-name ${{ secrets.AWS_LAMBDA_FUNCTION_NAME }}
+          
+          # Publish new version
+          aws lambda publish-version \
+            --function-name ${{ secrets.AWS_LAMBDA_FUNCTION_NAME }} \
+            --description "Deployment of version $VERSION"
