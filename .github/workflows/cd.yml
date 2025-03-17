@@ -242,9 +242,10 @@ jobs:
             echo "Checking Lambda function state..."
             
             # Get function details with error handling and retry for conflicts
-            local max_retries=3
+            local max_retries=5
             local retry_count=0
             local retry_delay=5
+            local backoff_multiplier=2
             
             while [ $retry_count -lt $max_retries ]; do
               FUNCTION_DETAILS=$(aws lambda get-function --function-name $FUNCTION_NAME 2>&1)
@@ -255,6 +256,7 @@ jobs:
               elif echo "$FUNCTION_DETAILS" | grep -q "ResourceConflictException"; then
                 retry_count=$((retry_count + 1))
                 if [ $retry_count -lt $max_retries ]; then
+                  retry_delay=$((retry_delay * backoff_multiplier))
                   echo "ResourceConflictException detected, retrying in ${retry_delay}s (attempt $retry_count/$max_retries)..."
                   sleep $retry_delay
                   continue
@@ -265,18 +267,20 @@ jobs:
               return 2
             done
             
-            # Extract and validate state information
+            # Extract and validate state information with enhanced error checking
             STATE=$(echo "$FUNCTION_DETAILS" | jq -r '.Configuration.State')
             LAST_UPDATE=$(echo "$FUNCTION_DETAILS" | jq -r '.Configuration.LastUpdateStatus')
             LAST_UPDATE_REASON=$(echo "$FUNCTION_DETAILS" | jq -r '.Configuration.LastUpdateStatusReasonCode')
             CODE_SHA=$(echo "$FUNCTION_DETAILS" | jq -r '.Configuration.CodeSha256')
+            FUNCTION_ERROR=$(echo "$FUNCTION_DETAILS" | jq -r '.Configuration.LastUpdateStatusReason')
             
-            # Validate extracted values
+            # Validate extracted values with detailed error reporting
             if [ -z "$STATE" ] || [ "$STATE" = "null" ] || \
                [ -z "$LAST_UPDATE" ] || [ "$LAST_UPDATE" = "null" ]; then
               echo "ERROR: Invalid state information received"
               echo "State: $STATE"
               echo "Last Update: $LAST_UPDATE"
+              echo "Function Error: $FUNCTION_ERROR"
               return 5
             fi
             
@@ -284,29 +288,47 @@ jobs:
             echo "Last update status: $LAST_UPDATE"
             echo "Last update reason: $LAST_UPDATE_REASON"
             echo "Code SHA: $CODE_SHA"
-            
-            # Check for error states
-            if [ "$STATE" = "Failed" ]; then
-              echo "ERROR: Lambda function is in Failed state"
-              return 3
+            if [ ! -z "$FUNCTION_ERROR" ] && [ "$FUNCTION_ERROR" != "null" ]; then
+              echo "Function error details: $FUNCTION_ERROR"
             fi
             
-            if [ "$LAST_UPDATE" = "Failed" ]; then
-              echo "ERROR: Last update failed with reason: $LAST_UPDATE_REASON"
-              return 4
-            fi
-            
-            # Check for in-progress states
-            if [ "$STATE" = "Pending" ] || [ "$LAST_UPDATE" = "InProgress" ]; then
-              echo "Lambda function is in transition state"
-              return 1
-            fi
-            
-            # Check for desired state
-            if [ "$STATE" = "Active" ] && [ "$LAST_UPDATE" = "Successful" ]; then
-              echo "Lambda function is in desired state"
-              return 0
-            fi
+            # Enhanced state validation with specific error codes
+            case "$STATE" in
+              "Failed")
+                echo "ERROR: Lambda function is in Failed state"
+                echo "Failure reason: $FUNCTION_ERROR"
+                return 3
+                ;;
+              "Pending")
+                echo "Lambda function is in Pending state"
+                return 1
+                ;;
+              "Active")
+                case "$LAST_UPDATE" in
+                  "Failed")
+                    echo "ERROR: Last update failed with reason: $LAST_UPDATE_REASON"
+                    echo "Error details: $FUNCTION_ERROR"
+                    return 4
+                    ;;
+                  "InProgress")
+                    echo "Update is still in progress"
+                    return 1
+                    ;;
+                  "Successful")
+                    echo "Lambda function is in desired state"
+                    return 0
+                    ;;
+                  *)
+                    echo "WARNING: Unknown last update status: $LAST_UPDATE"
+                    return 6
+                    ;;
+                esac
+                ;;
+              *)
+                echo "WARNING: Unknown function state: $STATE"
+                return 7
+                ;;
+            esac
             
             echo "Lambda function is not in desired state"
             return 1
@@ -321,6 +343,7 @@ jobs:
             local start_time=$(date +%s)
             local consecutive_conflicts=0
             local wait_seconds=$initial_wait
+            local last_error=""
             
             echo "Waiting for Lambda function to be ready (timeout: ${timeout_seconds}s)..."
             
@@ -330,6 +353,9 @@ jobs:
               
               if [ $elapsed_time -ge $timeout_seconds ]; then
                 echo "ERROR: Global timeout reached after ${elapsed_time} seconds"
+                if [ ! -z "$last_error" ]; then
+                  echo "Last error encountered: $last_error"
+                fi
                 return 2
               fi
               
@@ -350,39 +376,52 @@ jobs:
                 2)
                   if echo "$FUNCTION_DETAILS" | grep -q "ResourceConflictException"; then
                     consecutive_conflicts=$((consecutive_conflicts + 1))
-                    # Exponential backoff for conflicts
+                    # Enhanced exponential backoff for conflicts
                     wait_seconds=$((initial_wait * 2 ** consecutive_conflicts))
                     if [ $wait_seconds -gt $max_wait ]; then
                       wait_seconds=$max_wait
                     fi
                     echo "ResourceConflictException detected, increasing wait time to ${wait_seconds}s"
+                    last_error="ResourceConflictException after $consecutive_conflicts consecutive attempts"
                   else
                     echo "ERROR: Failed to get Lambda status (${elapsed_time}s elapsed)"
+                    last_error="$FUNCTION_DETAILS"
                     return 3
                   fi
                   ;;
                 3|4)
                   echo "ERROR: Lambda is in failed state (${elapsed_time}s elapsed)"
+                  last_error="Function state: $STATE, Last update status: $LAST_UPDATE, Reason: $LAST_UPDATE_REASON"
                   return 4
                   ;;
                 5)
                   echo "ERROR: Invalid state information received (${elapsed_time}s elapsed)"
+                  last_error="Invalid state data - State: $STATE, Last update: $LAST_UPDATE"
                   return 5
+                  ;;
+                6|7)
+                  echo "WARNING: Unexpected state encountered (${elapsed_time}s elapsed)"
+                  last_error="Unexpected state - State: $STATE, Last update: $LAST_UPDATE"
+                  # Continue trying as this might be temporary
                   ;;
               esac
               
+              # Dynamic wait time calculation based on remaining time
               local remaining_time=$((timeout_seconds - elapsed_time))
               if [ $remaining_time -lt $wait_seconds ]; then
                 wait_seconds=$remaining_time
               fi
               
               if [ $wait_seconds -gt 0 ]; then
-                echo "Waiting ${wait_seconds} seconds before next attempt..."
+                echo "Waiting ${wait_seconds} seconds before next attempt... (${remaining_time}s remaining)"
                 sleep $wait_seconds
               fi
             done
             
             echo "ERROR: Maximum attempts ($max_attempts) reached after ${elapsed_time}s"
+            if [ ! -z "$last_error" ]; then
+              echo "Last error encountered: $last_error"
+            fi
             return 1
           }
           
