@@ -38,6 +38,9 @@ class Product(Base):
     # Status
     is_active: Mapped[bool] = Column(Boolean, nullable=False, default=True, index=True)
     
+    # Rating
+    rating: Mapped[Optional[int]] = Column(Integer, nullable=True)
+    
     # Relationships
     order_items = relationship("OrderItem", back_populates="product")
     

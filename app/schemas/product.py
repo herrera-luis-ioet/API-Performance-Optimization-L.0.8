@@ -77,6 +77,13 @@ class ProductBase(BaseSchema):
         True, 
         description="Whether the product is active"
     )
+    rating: Optional[int] = Field(
+        None,
+        description="Product rating (1-5)",
+        ge=1,
+        le=5,
+        examples=[4]
+    )
     
     @field_validator("price")
     @classmethod
@@ -115,7 +122,8 @@ class ProductCreate(ProductBase, BaseCreateSchema):
                 "stock": 100,
                 "category": "Electronics",
                 "tags": "ergonomic,keyboard,office",
-                "is_active": True
+                "is_active": True,
+                "rating": 4
             }
         }
     }
@@ -178,6 +186,12 @@ class ProductUpdate(BaseUpdateSchema):
         None, 
         description="Whether the product is active"
     )
+    rating: Optional[int] = Field(
+        None,
+        description="Product rating (1-5)",
+        ge=1,
+        le=5
+    )
     
     @field_validator("price")
     @classmethod
@@ -230,6 +244,7 @@ class ProductRead(ProductBase, BaseReadSchema):
                 "category": "Electronics",
                 "tags": "ergonomic,keyboard,office",
                 "is_active": True,
+                "rating": 4,
                 "created_at": "2023-01-01T00:00:00",
                 "updated_at": "2023-01-01T00:00:00"
             }
