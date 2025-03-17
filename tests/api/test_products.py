@@ -134,7 +134,7 @@ async def test_create_product_duplicate_sku(client: AsyncClient, test_products: 
         "sku": "TEST-SKU-001",  # Already exists
         "image": "https://example.com/images/duplicate-product.jpg",
         "price": 399.99,
-        "stock_quantity": 50,
+        "stock": 50,
         "category": "Test",
         "tags": "test,duplicate",
         "is_active": True
@@ -171,7 +171,7 @@ async def test_update_product(client: AsyncClient, test_products: list):
     assert data["name"] == update_data["name"]
     assert data["image"] == update_data["image"]
     assert Decimal(str(data["price"])) == Decimal(str(update_data["price"]))
-    assert data["stock_quantity"] == update_data["stock_quantity"]
+    assert data["stock"] == update_data["stock"]
     # Fields not in update_data should remain unchanged
     assert data["sku"] == test_products[0].sku
     assert data["category"] == test_products[0].category
@@ -198,7 +198,7 @@ async def test_update_product_not_found(client: AsyncClient):
 async def test_update_product_stock(client: AsyncClient, test_products: list):
     """Test updating a product's stock quantity."""
     product_id = test_products[0].id
-    initial_stock = test_products[0].stock_quantity
+    initial_stock = test_products[0].stock
     quantity_change = 50
     
     response = await client.patch(
@@ -209,14 +209,14 @@ async def test_update_product_stock(client: AsyncClient, test_products: list):
     assert response.status_code == 200
     data = response.json()
     assert data["id"] == product_id
-    assert data["stock_quantity"] == initial_stock + quantity_change
+    assert data["stock"] == initial_stock + quantity_change
 
 
 @pytest.mark.asyncio
 async def test_update_product_stock_negative(client: AsyncClient, test_products: list):
     """Test decreasing a product's stock quantity."""
     product_id = test_products[1].id
-    initial_stock = test_products[1].stock_quantity
+    initial_stock = test_products[1].stock
     quantity_change = -20
     
     response = await client.patch(
@@ -227,7 +227,7 @@ async def test_update_product_stock_negative(client: AsyncClient, test_products:
     assert response.status_code == 200
     data = response.json()
     assert data["id"] == product_id
-    assert data["stock_quantity"] == initial_stock + quantity_change
+    assert data["stock"] == initial_stock + quantity_change
 
 
 @pytest.mark.asyncio
