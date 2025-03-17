@@ -1,0 +1,90 @@
+service: api-performance-optimization
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: python3.9
+  stage: ${opt:stage, 'dev'}
+  region: ${opt:region, 'us-east-1'}
+  memorySize: 1024
+  timeout: 30
+  environment:
+    STAGE: ${self:provider.stage}
+    REDIS_HOST: ${ssm:/api-perf/${self:provider.stage}/redis/host}
+    REDIS_PORT: ${ssm:/api-perf/${self:provider.stage}/redis/port}
+    MYSQL_HOST: ${ssm:/api-perf/${self:provider.stage}/mysql/host}
+    MYSQL_PORT: ${ssm:/api-perf/${self:provider.stage}/mysql/port}
+    MYSQL_USER: ${ssm:/api-perf/${self:provider.stage}/mysql/user}
+    MYSQL_PASSWORD: ${ssm:/api-perf/${self:provider.stage}/mysql/password}
+    MYSQL_DB: ${ssm:/api-perf/${self:provider.stage}/mysql/database}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - ssm:GetParameter
+            - ssm:GetParameters
+          Resource: 
+            - arn:aws:ssm:${self:provider.region}:*:parameter/api-perf/${self:provider.stage}/*
+        - Effect: Allow
+          Action:
+            - rds:*
+          Resource: 
+            - arn:aws:rds:${self:provider.region}:*:*
+        - Effect: Allow
+          Action:
+            - elasticache:*
+          Resource: 
+            - arn:aws:elasticache:${self:provider.region}:*:*
+
+package:
+  patterns:
+    - '!.git/**'
+    - '!.gitignore'
+    - '!.env*'
+    - '!tests/**'
+    - '!docs/**'
+    - '!docker*'
+    - '!poetry.lock'
+    - '!pyproject.toml'
+    - '!README.md'
+    - '!venv/**'
+    - 'app/**'
+    - 'requirements.txt'
+
+functions:
+  api:
+    handler: app.main.handler
+    events:
+      - httpApi:
+          path: /{proxy+}
+          method: ANY
+    environment:
+      PYTHONPATH: .
+    vpc:
+      securityGroupIds:
+        - ${ssm:/api-perf/${self:provider.stage}/vpc/security-group-id}
+      subnetIds:
+        - ${ssm:/api-perf/${self:provider.stage}/vpc/subnet-id-1}
+        - ${ssm:/api-perf/${self:provider.stage}/vpc/subnet-id-2}
+
+plugins:
+  - serverless-python-requirements
+
+custom:
+  pythonRequirements:
+    layer:
+      name: python-deps
+      description: Python dependencies for API Performance Optimization service
+    noDeploy:
+      - coverage
+      - pytest
+      - black
+      - isort
+      - flake8
+      - mypy
+      - locust
+      - pre-commit
+      - faker
+    dockerizePip: true
