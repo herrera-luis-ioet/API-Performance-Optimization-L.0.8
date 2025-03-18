@@ -1,0 +1,20 @@
+fastapi==0.104.0
+uvicorn[standard]==0.23.2
+sqlalchemy==2.0.22
+aiomysql==0.2.0
+redis==5.0.1
+pydantic[email]==2.4.2
+pydantic-settings==2.0.3
+python-dotenv==1.0.0
+alembic==1.12.0
+tenacity==8.2.3
+httpx==0.25.0
+# Removing asyncio package as it's part of Python standard library
+# asyncio==3.4.3
+aioredis==2.0.1
+starlette==0.27.0
+email-validator==2.1.0
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+mangum==0.17.0
+aws-lambda-powertools==2.30.0
