@@ -255,13 +255,16 @@ jobs:
             --memory-size 256 \
             --environment Variables="{
               STAGE=production,
-              DB_HOST=${{ secrets.PROD_DB_HOST }},
-              DB_PORT=${{ secrets.PROD_DB_PORT }},
-              DB_USER=${{ secrets.PROD_DB_USER }},
-              DB_PASSWORD=${{ secrets.PROD_DB_PASSWORD }},
-              DB_NAME=${{ secrets.PROD_DB_NAME }},
+              MYSQL_SERVER=${{ secrets.PROD_DB_HOST }},
+              MYSQL_PORT=${{ secrets.PROD_DB_PORT }},
+              MYSQL_USER=${{ secrets.PROD_DB_USER }},
+              MYSQL_PASSWORD=${{ secrets.PROD_DB_PASSWORD }},
+              MYSQL_DB=${{ secrets.PROD_DB_NAME }},
               REDIS_HOST=${{ secrets.PROD_REDIS_HOST }},
-              REDIS_PORT=${{ secrets.PROD_REDIS_PORT }}
+              REDIS_PORT=${{ secrets.PROD_REDIS_PORT }},
+              REDIS_DB=${{ secrets.PROD_REDIS_DB }},
+              REDIS_PASSWORD=${{ secrets.PROD_REDIS_PASSWORD }},
+              REDIS_CACHE_EXPIRE_SECONDS=${{ secrets.PROD_REDIS_CACHE_EXPIRE_SECONDS }}
             }"
           
           # Wait for update to complete
