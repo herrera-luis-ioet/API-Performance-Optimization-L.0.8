@@ -9,8 +9,8 @@ python-dotenv==1.0.0
 alembic==1.12.0
 tenacity==8.2.3
 httpx==0.25.0
-# Removing asyncio package as it's part of Python standard library
-# asyncio==3.4.3
+# asyncio is part of Python standard library since Python 3.4
+# Removed explicit asyncio==3.4.3 dependency to avoid conflicts with Python 3.9+ where 'async' is a reserved keyword
 aioredis==2.0.1
 starlette==0.27.0
 email-validator==2.1.0
