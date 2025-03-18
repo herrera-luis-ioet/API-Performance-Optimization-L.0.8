@@ -28,96 +28,71 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def create_application() -> FastAPI:
-    """Create and configure the FastAPI application.
-
-    Returns:
-        FastAPI: Configured FastAPI application
-    """
-    # Create FastAPI app with metadata
-    application = FastAPI(
-        title=settings.PROJECT_NAME,
-        description=settings.DESCRIPTION,
-        version=settings.VERSION,
-        openapi_url=f"{settings.API_V1_STR}/openapi.json",
-        docs_url="/docs",
-        redoc_url="/redoc",
+# Create FastAPI app with metadata
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    description=settings.DESCRIPTION,
+    version=settings.VERSION,
+    openapi_url=f"{settings.API_V1_STR}/openapi.json",
+    docs_url="/docs",
+    redoc_url="/redoc",
+)
+# Set up CORS middleware
+if settings.BACKEND_CORS_ORIGINS:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[str(origin).rstrip("/") for origin in settings.BACKEND_CORS_ORIGINS],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
-
-    # Set up CORS middleware
-    if settings.BACKEND_CORS_ORIGINS:
-        application.add_middleware(
-            CORSMiddleware,
-            allow_origins=[str(origin).rstrip("/") for origin in settings.BACKEND_CORS_ORIGINS],
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
-
-    # Include API router
-    application.include_router(api_router, prefix=settings.API_V1_STR)
-
-    # Add exception handlers
-    @application.exception_handler(StarletteHTTPException)
-    async def http_exception_handler(
-        request: Request, exc: StarletteHTTPException
-    ) -> JSONResponse:
-        """Handle HTTP exceptions.
-
-        Args:
-            request: Request that caused the exception
-            exc: HTTP exception
-
-        Returns:
-            JSONResponse: Error response
-        """
-        logger.error(f"HTTP error: {exc.detail}")
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={"detail": exc.detail},
-        )
-
-    @application.exception_handler(RequestValidationError)
-    async def validation_exception_handler(
-        request: Request, exc: RequestValidationError
-    ) -> JSONResponse:
-        """Handle validation exceptions.
-
-        Args:
-            request: Request that caused the exception
-            exc: Validation exception
-
-        Returns:
-            JSONResponse: Error response with validation details
-        """
-        logger.error(f"Validation error: {exc.errors()}")
-        return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            content={"detail": exc.errors()},
-        )
-
-    @application.get("/")
-    def root() -> Dict[str, Any]:
-        """Root endpoint.
-
-        Returns:
-            dict: Basic API information
-        """
-        return {
-            "name": settings.PROJECT_NAME,
-            "version": settings.VERSION,
-            "description": settings.DESCRIPTION,
-            "docs": "/docs",
-        }
-
-    return application
-
-
-# Create the FastAPI application
-app = create_application()
-
-# Create Lambda handler
-handler = Mangum(app, lifespan="off")
+# Include API router
+app.include_router(api_router, prefix=settings.API_V1_STR)
+# Add exception handlers
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(
+    request: Request, exc: StarletteHTTPException
+) -> JSONResponse:
+    """Handle HTTP exceptions.
+    Args:
+        request: Request that caused the exception
+        exc: HTTP exception
+    Returns:
+        JSONResponse: Error response
+    """
+    logger.error(f"HTTP error: {exc.detail}")
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+    )
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    """Handle validation exceptions.
+    Args:
+        request: Request that caused the exception
+        exc: Validation exception
+    Returns:
+        JSONResponse: Error response with validation details
+    """
+    logger.error(f"Validation error: {exc.errors()}")
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": exc.errors()},
+    )
+@app.get("/")
+def root() -> Dict[str, Any]:
+    """Root endpoint.
+    Returns:
+        dict: Basic API information
+    """
+    return {
+        "name": settings.PROJECT_NAME,
+        "version": settings.VERSION,
+        "description": settings.DESCRIPTION,
+        "docs": "/docs",
+    }
 
 
 # Initialize database and Redis on startup
@@ -163,3 +138,7 @@ async def shutdown_clients() -> None:
     logger.info("Closing rate limiter...")
     await rate_limiter.close()
     logger.info("Rate limiter closed.")
+
+
+# Create Lambda handler
+handler = Mangum(app, lifespan="off")
