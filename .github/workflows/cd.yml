@@ -241,6 +241,10 @@ jobs:
             --function-name ${{ secrets.AWS_LAMBDA_FUNCTION_NAME }} \
             --zip-file fileb://lambda-package.zip
           
+          # Wait for function code update to complete
+          aws lambda wait function-updated \
+            --function-name ${{ secrets.AWS_LAMBDA_FUNCTION_NAME }}
+          
           # Update Lambda configuration
           aws lambda update-function-configuration \
             --function-name ${{ secrets.AWS_LAMBDA_FUNCTION_NAME }} \
