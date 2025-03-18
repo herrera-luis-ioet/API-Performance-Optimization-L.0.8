@@ -224,7 +224,8 @@ jobs:
           pip install -r requirements.txt --target deployment-package
           
           # Copy application code
-          cp -r app/* deployment-package/
+          cp -r app deployment-package/
+          cp main.py deployment-package/
           
           # Create ZIP file
           cd deployment-package
