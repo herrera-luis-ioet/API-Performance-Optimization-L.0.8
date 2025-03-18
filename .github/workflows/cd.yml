@@ -184,7 +184,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: '3.12'
           cache: 'pip'
       
       - name: Install Poetry
@@ -212,16 +212,13 @@ jobs:
           # Export dependencies
           poetry export -f requirements.txt --without-hashes > requirements.txt
           
-          # Install dependencies into the package directory
-          pip install -r requirements.txt --target deployment-package
+          cp requirements.txt deployment_package/
+          cd deployment_package
+          pip install --target . -r requirements.txt --no-cache-dir
           
           # Copy application code
           cp -r app/* deployment-package/
-          
-          # Create ZIP file
-          cd deployment-package
-          zip -r ../lambda-package.zip .
-          cd ..
+          zip -r ../lambda_package.zip . -x "*.pyc" "tests/*" "__pycache__/*"
       
       - name: Update Lambda Function
         run: |
@@ -241,7 +238,7 @@ jobs:
           aws lambda update-function-configuration \
             --function-name ${{ secrets.AWS_LAMBDA_FUNCTION_NAME }} \
             --handler main.handler \
-            --runtime python3.9 \
+            --runtime python3.12 \
             --timeout 30 \
             --memory-size 256 \
             --environment Variables="{
