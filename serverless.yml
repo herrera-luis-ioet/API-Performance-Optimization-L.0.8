@@ -39,6 +39,7 @@ provider:
             - arn:aws:elasticache:${self:provider.region}:*:*
 
 package:
+  individually: true
   patterns:
     - '!.git/**'
     - '!.gitignore'
@@ -50,8 +51,11 @@ package:
     - '!pyproject.toml'
     - '!README.md'
     - '!venv/**'
+    - '!__pycache__/**'
+    - '!**/__pycache__/**'
     - 'app/**'
     - 'requirements.txt'
+    - '__init__.py'
 
 functions:
   api:
@@ -61,7 +65,7 @@ functions:
           path: /{proxy+}
           method: ANY
     environment:
-      PYTHONPATH: .
+      PYTHONPATH: /var/task
     vpc:
       securityGroupIds:
         - ${ssm:/api-perf/${self:provider.stage}/vpc/security-group-id}
@@ -88,3 +92,8 @@ custom:
       - pre-commit
       - faker
     dockerizePip: true
+    zip: true
+    slim: true
+    usePoetry: false
+    useDownloadCache: true
+    useStaticCache: true
