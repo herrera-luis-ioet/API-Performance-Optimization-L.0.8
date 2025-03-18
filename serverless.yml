@@ -55,7 +55,7 @@ package:
 
 functions:
   api:
-    handler: app.main.handler
+    handler: main.handler
     events:
       - httpApi:
           path: /{proxy+}
