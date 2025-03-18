@@ -248,7 +248,7 @@ jobs:
           # Update Lambda configuration
           aws lambda update-function-configuration \
             --function-name ${{ secrets.AWS_LAMBDA_FUNCTION_NAME }} \
-            --handler app.main.handler \
+            --handler main.handler \
             --runtime python3.9 \
             --timeout 30 \
             --memory-size 256 \
