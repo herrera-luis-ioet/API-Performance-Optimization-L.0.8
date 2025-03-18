@@ -259,20 +259,13 @@ jobs:
               VERSION='0.1.0',
               DESCRIPTION='High-performance API service with FastAPI, MySQL, and Redis',
               API_V1_STR=/api/v1,
-              SECRET_KEY=${{ secrets.PROD_SECRET_KEY }},
               MYSQL_SERVER=${{ secrets.PROD_MYSQL_SERVER }},
               MYSQL_PORT=${{ secrets.PROD_MYSQL_PORT }},
               MYSQL_USER=${{ secrets.PROD_MYSQL_USER }},
               MYSQL_PASSWORD=${{ secrets.PROD_MYSQL_PASSWORD }},
               MYSQL_DB=${{ secrets.PROD_MYSQL_DB }},
               REDIS_HOST=${{ secrets.PROD_REDIS_HOST }},
-              REDIS_PORT=${{ secrets.PROD_REDIS_PORT }},
-              REDIS_DB=${{ secrets.PROD_REDIS_DB }},
-              REDIS_PASSWORD=${{ secrets.PROD_REDIS_PASSWORD }},
-              REDIS_CACHE_EXPIRE_SECONDS=${{ secrets.PROD_REDIS_CACHE_EXPIRE_SECONDS }},
-              RATE_LIMIT_REQUESTS=${{ secrets.PROD_RATE_LIMIT_REQUESTS }},
-              RATE_LIMIT_PERIOD_SECONDS=${{ secrets.PROD_RATE_LIMIT_PERIOD_SECONDS }},
-              LOG_LEVEL=${{ secrets.PROD_LOG_LEVEL }}
+              REDIS_PORT=${{ secrets.PROD_REDIS_PORT }}
             }"
           
           # Wait for update to complete
