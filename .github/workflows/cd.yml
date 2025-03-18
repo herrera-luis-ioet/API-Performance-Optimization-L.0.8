@@ -255,10 +255,6 @@ jobs:
             --memory-size 256 \
             --environment Variables="{
               STAGE=production,
-              PROJECT_NAME='API Performance Optimization',
-              VERSION='0.1.0',
-              DESCRIPTION='High-performance API service with FastAPI, MySQL, and Redis',
-              API_V1_STR=/api/v1,
               MYSQL_SERVER=${{ secrets.PROD_MYSQL_SERVER }},
               MYSQL_PORT=${{ secrets.PROD_MYSQL_PORT }},
               MYSQL_USER=${{ secrets.PROD_MYSQL_USER }},
