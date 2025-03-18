@@ -265,7 +265,8 @@ jobs:
               MYSQL_PASSWORD=${{ secrets.PROD_MYSQL_PASSWORD }},
               MYSQL_DB=${{ secrets.PROD_MYSQL_DB }},
               REDIS_HOST=${{ secrets.PROD_REDIS_HOST }},
-              REDIS_PORT=${{ secrets.PROD_REDIS_PORT }}
+              REDIS_PORT=${{ secrets.PROD_REDIS_PORT }},
+              BACKEND_CORS_ORIGINS=${{ secrets.BACKEND_CORS_ORIGINS }}
             }"
           
           # Wait for update to complete
