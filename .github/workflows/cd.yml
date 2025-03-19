@@ -218,7 +218,7 @@ jobs:
           mkdir -p deployment-package
           
           # Export dependencies
-          poetry export -f requirements.txt --without-hashes > requirements.txt
+          poetry export --without-hashes --format=requirements.txt > requirements.txt
           
           # Install dependencies into the package directory
           pip install -r requirements.txt --target deployment-package
