@@ -121,8 +121,8 @@ async def test_create_product(client: AsyncClient):
     assert data["tags"] == product_data["tags"]
     assert data["is_active"] == product_data["is_active"]
     assert "id" in data
-    assert "created_at" in data
-    assert "updated_at" in data
+    assert "createdAt" in data
+    assert "updatedAt" in data
 
 
 @pytest.mark.asyncio

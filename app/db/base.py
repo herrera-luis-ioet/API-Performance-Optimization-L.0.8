@@ -34,10 +34,10 @@ class Base(DeclarativeBase):
 
     # Common columns for all models
     id: Mapped[int] = Column(Integer, primary_key=True, index=True)
-    created_at: Mapped[datetime] = Column(
+    createdAt: Mapped[datetime] = Column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    updated_at: Mapped[datetime] = Column(
+    updatedAt: Mapped[datetime] = Column(
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),

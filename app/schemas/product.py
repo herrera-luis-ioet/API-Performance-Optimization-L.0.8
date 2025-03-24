@@ -258,8 +258,8 @@ class ProductRead(ProductBase, BaseReadSchema):
                 "is_active": True,
                 "rating": 4,
                 "ratingCount": 42,
-                "created_at": "2023-01-01T00:00:00",
-                "updated_at": "2023-01-01T00:00:00"
+                "createdAt": "2023-01-01T00:00:00",
+                "updatedAt": "2023-01-01T00:00:00"
             }
         }
     }
